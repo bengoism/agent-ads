@@ -10,6 +10,15 @@ Two environment variables control Meta API access:
 |----------|----------|---------|
 | `META_ADS_ACCESS_TOKEN` | Yes | Bearer token for all Meta API calls |
 
+### Required permissions
+
+| Permission | Needed for |
+|------------|------------|
+| `ads_read` | All `--account` commands: campaigns, insights, creatives, pixels |
+| `business_management` | `businesses list` and `ad-accounts list` (discovery) |
+
+Both are read-only — no write access is granted. Generate a token at the [Graph API Explorer](https://developers.facebook.com/tools/explorer/) with the permissions above.
+
 Secrets are **never** read from CLI flags or config files — only from environment variables.
 
 ### Setting up auth

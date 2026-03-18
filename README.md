@@ -42,7 +42,15 @@ Meta requires an access token. Set it as an environment variable or in a `.env` 
 export META_ADS_ACCESS_TOKEN=EAABs...
 ```
 
-Or create a `.env` file in the current directory with the same variables.
+Or create a `.env` file in the current directory with the same variable.
+
+**Required permission:** `ads_read` — read access to campaigns, insights, creatives, and pixels.
+
+**Optional permission:** `business_management` — discover businesses and ad accounts (`businesses list`, `ad-accounts list`). Without it, you can still query any account directly if you know its ID.
+
+Both permissions are read-only. The CLI never creates, modifies, or deletes anything.
+
+Generate a token at the [Graph API Explorer](https://developers.facebook.com/tools/explorer/) — select your app, add the permissions above, and click "Generate Access Token".
 
 ### 2. Verify your setup
 

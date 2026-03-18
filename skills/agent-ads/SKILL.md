@@ -73,6 +73,17 @@ All list commands support:
 - **`--envelope`**: wraps stdout with `{ "data": ..., "meta": ..., "paging": ... }`
 - **Exit codes**: 0 = success, 1 = transport/internal, 2 = config/argument, 3 = API error
 
+## Token Permissions
+
+The user's `META_ADS_ACCESS_TOKEN` needs specific Meta permissions (scopes) depending on what commands they run:
+
+| Permission | Needed for |
+|------------|------------|
+| `ads_read` | All `--account` commands: campaigns, insights, creatives, pixels |
+| `business_management` | `businesses list` and `ad-accounts list` (discovery) |
+
+Both are read-only — no write access is granted. If the user gets a "Missing Permission" error, they need to regenerate their token with the correct scopes at the [Graph API Explorer](https://developers.facebook.com/tools/explorer/).
+
 ## Worked Example
 
 A typical multi-step session discovering accounts and pulling a report:
