@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{self, IsTerminal, Read};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
@@ -785,7 +785,7 @@ async fn handle_doctor(
     let mut checks = vec![
         json!({
             "name": "credential_store",
-            "ok": snapshot.credential_store_available,
+            "ok": credential_store_check_ok(&snapshot),
             "detail": credential_store_detail(&snapshot),
         }),
         json!({
@@ -1711,12 +1711,6 @@ fn resolve_auth_token_input(args: &AuthSetArgs) -> Result<String, MetaAdsError> 
 }
 
 fn prompt_for_auth_token() -> Result<String, MetaAdsError> {
-    if !io::stdin().is_terminal() {
-        return Err(MetaAdsError::InvalidArgument(
-            "stdin is not a terminal; pass --stdin to read the token from stdin".to_string(),
-        ));
-    }
-
     prompt_password("Meta access token: ").map_err(MetaAdsError::Io)
 }
 
@@ -1735,8 +1729,16 @@ fn linux_secure_storage_hint() -> &'static str {
     }
 }
 
+fn credential_store_check_ok(snapshot: &ConfigSnapshot) -> bool {
+    snapshot.credential_store_available
+        || snapshot.access_token_source == AccessTokenSource::ShellEnv
+}
+
 fn credential_store_detail(snapshot: &ConfigSnapshot) -> String {
     match snapshot.credential_store_error.as_deref() {
+        Some(error) if snapshot.access_token_source == AccessTokenSource::ShellEnv => {
+            format!("shell env override active; OS credential store unavailable: {error}")
+        }
         Some(error) => format!("OS credential store unavailable: {error}"),
         None if snapshot.keychain_token_present => {
             "stored Meta token found in OS credential store".to_string()
@@ -1846,9 +1848,35 @@ fn error_payload(error: &MetaAdsError) -> Value {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
+    use agent_ads_core::config::{AccessTokenSource, ConfigSnapshot};
+    use agent_ads_core::output::OutputFormat;
     use clap::{Command, CommandFactory, Parser};
 
-    use super::Cli;
+    use super::{credential_store_check_ok, credential_store_detail, Cli};
+
+    fn snapshot_with_auth(
+        access_token_source: AccessTokenSource,
+        credential_store_available: bool,
+        credential_store_error: Option<&str>,
+    ) -> ConfigSnapshot {
+        ConfigSnapshot {
+            config_path: PathBuf::from("agent-ads.config.json"),
+            config_file_exists: true,
+            access_token_present: access_token_source != AccessTokenSource::Missing,
+            access_token_source,
+            credential_store_available,
+            keychain_token_present: false,
+            credential_store_error: credential_store_error.map(str::to_string),
+            api_base_url: "https://graph.facebook.com".to_string(),
+            api_version: "v25.0".to_string(),
+            timeout_seconds: 60,
+            default_business_id: None,
+            default_account_id: None,
+            output_format: OutputFormat::Json,
+        }
+    }
 
     fn render_help(command: &mut Command) -> String {
         let mut buffer = Vec::new();
@@ -1974,5 +2002,29 @@ mod tests {
     fn requires_a_preview_target() {
         let result = Cli::try_parse_from(["agent-ads", "meta", "creatives", "preview"]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn doctor_treats_unavailable_credential_store_as_ok_when_shell_env_is_active() {
+        let snapshot = snapshot_with_auth(
+            AccessTokenSource::ShellEnv,
+            false,
+            Some("secure storage backend is unavailable"),
+        );
+
+        assert!(credential_store_check_ok(&snapshot));
+        assert!(credential_store_detail(&snapshot).contains("shell env override active"));
+    }
+
+    #[test]
+    fn doctor_fails_credential_store_check_when_store_is_unavailable_and_token_is_missing() {
+        let snapshot = snapshot_with_auth(
+            AccessTokenSource::Missing,
+            false,
+            Some("secure storage backend is unavailable"),
+        );
+
+        assert!(!credential_store_check_ok(&snapshot));
+        assert!(credential_store_detail(&snapshot).contains("OS credential store unavailable"));
     }
 }
