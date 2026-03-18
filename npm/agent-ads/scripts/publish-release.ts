@@ -30,7 +30,7 @@ const packages: PackageTarget[] = [
   { dir: path.join(root, "npm", "platform", "darwin-x64"), access: "public" },
   { dir: path.join(root, "npm", "platform", "linux-arm64-gnu"), access: "public" },
   { dir: path.join(root, "npm", "platform", "linux-x64-gnu"), access: "public" },
-  { dir: path.join(root, "npm", "platform", "win32-x64-msvc"), access: "public" },
+  { dir: path.join(root, "npm", "platform", "windows-x64-msvc"), access: "public" },
   { dir: path.join(root, "npm", "agent-ads"), access: "public" }
 ];
 

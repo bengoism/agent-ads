@@ -31,7 +31,7 @@ const targets = [
         source: "agent-ads-linux-x64-gnu"
     },
     {
-        packageDir: node_path_1.default.join(root, "npm", "platform", "win32-x64-msvc"),
+        packageDir: node_path_1.default.join(root, "npm", "platform", "windows-x64-msvc"),
         binaryName: "agent-ads.exe",
         source: "agent-ads-win32-x64-msvc.exe"
     }

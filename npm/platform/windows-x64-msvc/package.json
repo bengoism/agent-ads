@@ -1,5 +1,5 @@
 {
-  "name": "agent-ads-win32-x64-msvc",
+  "name": "agent-ads-windows-x64-msvc",
   "version": "0.1.0",
   "description": "Windows x64 MSVC binary for the agent-ads CLI",
   "author": "bengoism",

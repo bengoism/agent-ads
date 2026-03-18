@@ -9,7 +9,7 @@ const packages = [
     "agent-ads-darwin-x64",
     "agent-ads-linux-arm64-gnu",
     "agent-ads-linux-x64-gnu",
-    "agent-ads-win32-x64-msvc",
+    "agent-ads-windows-x64-msvc",
     "agent-ads"
 ];
 for (const packageName of packages) {

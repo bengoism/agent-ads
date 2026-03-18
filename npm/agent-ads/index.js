@@ -26,8 +26,8 @@ const platformPackages = {
         workspaceDir: node_path_1.default.join(__dirname, "..", "platform", "linux-x64-gnu")
     },
     "win32:x64": {
-        packageName: "agent-ads-win32-x64-msvc",
-        workspaceDir: node_path_1.default.join(__dirname, "..", "platform", "win32-x64-msvc")
+        packageName: "agent-ads-windows-x64-msvc",
+        workspaceDir: node_path_1.default.join(__dirname, "..", "platform", "windows-x64-msvc")
     }
 };
 exports.platformPackages = platformPackages;

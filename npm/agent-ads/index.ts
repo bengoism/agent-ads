@@ -27,8 +27,8 @@ const platformPackages: Partial<Record<PlatformKey, PlatformTarget>> = {
     workspaceDir: path.join(__dirname, "..", "platform", "linux-x64-gnu")
   },
   "win32:x64": {
-    packageName: "agent-ads-win32-x64-msvc",
-    workspaceDir: path.join(__dirname, "..", "platform", "win32-x64-msvc")
+    packageName: "agent-ads-windows-x64-msvc",
+    workspaceDir: path.join(__dirname, "..", "platform", "windows-x64-msvc")
   }
 };
 

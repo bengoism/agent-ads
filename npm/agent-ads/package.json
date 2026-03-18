@@ -28,7 +28,7 @@
     "agent-ads-darwin-x64": "0.1.0",
     "agent-ads-linux-arm64-gnu": "0.1.0",
     "agent-ads-linux-x64-gnu": "0.1.0",
-    "agent-ads-win32-x64-msvc": "0.1.0"
+    "agent-ads-windows-x64-msvc": "0.1.0"
   },
   "publishConfig": {
     "provenance": true
