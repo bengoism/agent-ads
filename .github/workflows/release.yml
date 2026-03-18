@@ -20,22 +20,32 @@ jobs:
             rust_target: aarch64-apple-darwin
             binary_name: agent-ads
             dist_name: agent-ads-darwin-arm64
-          - os: macos-13
+            needs_cross_gcc: "false"
+            linker: ""
+          - os: macos-latest
             rust_target: x86_64-apple-darwin
             binary_name: agent-ads
             dist_name: agent-ads-darwin-x64
+            needs_cross_gcc: "false"
+            linker: ""
           - os: ubuntu-latest
             rust_target: aarch64-unknown-linux-gnu
             binary_name: agent-ads
             dist_name: agent-ads-linux-arm64-gnu
+            needs_cross_gcc: "true"
+            linker: aarch64-linux-gnu-gcc
           - os: ubuntu-latest
             rust_target: x86_64-unknown-linux-gnu
             binary_name: agent-ads
             dist_name: agent-ads-linux-x64-gnu
+            needs_cross_gcc: "false"
+            linker: ""
           - os: windows-latest
             rust_target: x86_64-pc-windows-msvc
             binary_name: agent-ads.exe
             dist_name: agent-ads-win32-x64-msvc.exe
+            needs_cross_gcc: "false"
+            linker: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +53,14 @@ jobs:
         with:
           targets: ${{ matrix.rust_target }}
       - uses: Swatinem/rust-cache@v2
+      - name: Install Linux cross compiler
+        if: matrix.needs_cross_gcc == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
       - name: Build
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.linker }}
         run: cargo build --release --locked --target ${{ matrix.rust_target }} -p meta_ads_cli
       - name: Stage binary
         shell: bash
