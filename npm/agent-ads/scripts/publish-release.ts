@@ -15,6 +15,15 @@ type PackageManifest = {
 };
 
 const root = path.resolve(__dirname, "..", "..", "..");
+const hasNodeAuthToken = Boolean(process.env.NODE_AUTH_TOKEN);
+
+if (hasNodeAuthToken) {
+  console.log("Using NODE_AUTH_TOKEN for npm publish authentication.");
+} else {
+  console.log(
+    "NODE_AUTH_TOKEN is not set. Expecting npm trusted publishing to already be configured for every package."
+  );
+}
 
 const packages: PackageTarget[] = [
   { dir: path.join(root, "npm", "platform", "darwin-arm64"), access: "public" },
@@ -51,12 +60,22 @@ for (const target of packages) {
   }
 
   console.log(`Publishing ${pkg.name}@${pkg.version} from ${target.dir}`);
-  execFileSync(
-    "npm",
-    ["publish", "--access", target.access, "--provenance"],
-    {
-      cwd: target.dir,
-      stdio: "inherit"
-    }
-  );
+  try {
+    execFileSync(
+      "npm",
+      ["publish", "--access", target.access, "--provenance"],
+      {
+        cwd: target.dir,
+        stdio: "inherit"
+      }
+    );
+  } catch (error) {
+    const bootstrapHint = hasNodeAuthToken
+      ? "Verify that the token can create packages under the target npm account."
+      : "For a first release, add the NPM_PUBLISH_TOKEN GitHub Actions secret or publish the packages once manually before relying on trusted publishing.";
+    throw new Error(
+      `Failed to publish ${pkg.name}@${pkg.version}. ${bootstrapHint}`,
+      { cause: error }
+    );
+  }
 }

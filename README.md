@@ -119,6 +119,34 @@ npx skills add bengoism/agent-ads
 
 The repo-local source of truth for that skill is [skills/agent-ads/SKILL.md](skills/agent-ads/SKILL.md).
 
+## Publishing
+
+The release workflow publishes six npm packages:
+
+- `agent-ads`
+- `agent-ads-darwin-arm64`
+- `agent-ads-darwin-x64`
+- `agent-ads-linux-arm64-gnu`
+- `agent-ads-linux-x64-gnu`
+- `agent-ads-win32-x64-msvc`
+
+For a brand-new release, bootstrap with an npm publish token first:
+
+1. Create an npm automation or publish token for the `bengoism` account.
+2. Add it to GitHub Actions as the `NPM_PUBLISH_TOKEN` secret in `bengoism/agent-ads`.
+3. Push a `v*` tag to run the release workflow.
+
+After the first successful publish, switch the packages to npm trusted publishing:
+
+```bash
+npm install -g npm@^11.10.0
+npm login
+npm run release:trust
+```
+
+That configures all six packages to trust `.github/workflows/release.yml` from `bengoism/agent-ads`.
+After that, future releases can run without `NPM_PUBLISH_TOKEN`.
+
 ## Development
 
 ```bash

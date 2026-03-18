@@ -98,4 +98,13 @@ jobs:
           AGENT_ADS_BINARY_DIR="${GITHUB_WORKSPACE}/dist-flat" \
           node npm/agent-ads/scripts/prepare-release.js
       - name: Publish npm packages
-        run: node npm/agent-ads/scripts/publish-release.js
+        env:
+          NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+        run: |
+          if [ -n "$NPM_PUBLISH_TOKEN" ]; then
+            echo "Using NPM_PUBLISH_TOKEN for bootstrap or fallback npm auth."
+            export NODE_AUTH_TOKEN="$NPM_PUBLISH_TOKEN"
+          else
+            echo "NPM_PUBLISH_TOKEN is not set; attempting npm trusted publishing only."
+          fi
+          node npm/agent-ads/scripts/publish-release.js
