@@ -1,6 +1,7 @@
 mod meta;
 mod tiktok;
 
+use std::env;
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -20,6 +21,8 @@ use tracing_subscriber::EnvFilter;
 
 use meta::MetaCommand;
 use tiktok::TikTokCommand;
+
+const TIKTOK_REFRESH_TOKEN_ENV_VAR: &str = "TIKTOK_ADS_REFRESH_TOKEN";
 
 // ---------------------------------------------------------------------------
 // Shared arg structs (reused across providers)
@@ -267,24 +270,15 @@ async fn dispatch_tiktok(
     match command {
         TikTokCommand::Auth { command } => match command {
             tiktok::AuthCommand::Refresh(ref args) => {
-                // Refresh needs async + keychain read
-                let refresh_token = secret_store
-                    .get_secret(
-                        agent_ads_core::TIKTOK_REFRESH_TOKEN_SERVICE,
-                        agent_ads_core::TIKTOK_REFRESH_TOKEN_ACCOUNT,
-                    )
-                    .map_err(|e| TikTokError::Config(format!("failed to read refresh token: {e}")))?
-                    .ok_or_else(|| {
-                        TikTokError::Config(
-                            "no refresh token found in OS credential store. Run `agent-ads tiktok auth set --refresh-token` first.".to_string(),
-                        )
-                    })?;
+                let snapshot =
+                    agent_ads_core::tiktok_inspect(config_path, secret_store, overrides)?;
+                let refresh_token = resolve_tiktok_refresh_token(secret_store)?;
                 tiktok::handle_auth_refresh(
                     &args.app_id,
                     &args.app_secret,
                     &refresh_token,
                     secret_store,
-                    overrides,
+                    &snapshot,
                 )
                 .await
             }
@@ -432,6 +426,31 @@ pub fn read_input(path: &Path) -> Result<String, MetaAdsError> {
     }
 }
 
+fn resolve_tiktok_refresh_token(
+    secret_store: &dyn agent_ads_core::SecretStore,
+) -> Result<String, TikTokError> {
+    if let Some(refresh_token) = env::var(TIKTOK_REFRESH_TOKEN_ENV_VAR)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(refresh_token);
+    }
+
+    match secret_store.get_secret(
+        agent_ads_core::TIKTOK_REFRESH_TOKEN_SERVICE,
+        agent_ads_core::TIKTOK_REFRESH_TOKEN_ACCOUNT,
+    ) {
+        Ok(Some(refresh_token)) => Ok(refresh_token),
+        Ok(None) => Err(TikTokError::Config(format!(
+            "{TIKTOK_REFRESH_TOKEN_ENV_VAR} is missing and no refresh token was found in the OS credential store. Export {TIKTOK_REFRESH_TOKEN_ENV_VAR} or run `agent-ads tiktok auth set --refresh-token` first."
+        ))),
+        Err(error) => Err(TikTokError::Config(format!(
+            "{TIKTOK_REFRESH_TOKEN_ENV_VAR} is missing and the OS credential store could not be read: {error}. Export {TIKTOK_REFRESH_TOKEN_ENV_VAR} or run `agent-ads tiktok auth set --refresh-token` first."
+        ))),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Output and error rendering
 // ---------------------------------------------------------------------------
@@ -545,9 +564,85 @@ fn init_tracing(verbose: u8, quiet: bool) {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::env;
+    use std::sync::{LazyLock, Mutex};
+
+    use agent_ads_core::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
     use clap::{Command, CommandFactory, Parser};
 
-    use super::Cli;
+    use super::{resolve_tiktok_refresh_token, Cli, TIKTOK_REFRESH_TOKEN_ENV_VAR};
+
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    #[derive(Default)]
+    struct FakeSecretStore {
+        secrets: Mutex<HashMap<(String, String), String>>,
+        get_error: Mutex<Option<SecretStoreError>>,
+    }
+
+    impl FakeSecretStore {
+        fn with_tiktok_refresh_token(refresh_token: &str) -> Self {
+            let store = Self::default();
+            store.secrets.lock().unwrap().insert(
+                (
+                    agent_ads_core::TIKTOK_REFRESH_TOKEN_SERVICE.to_string(),
+                    agent_ads_core::TIKTOK_REFRESH_TOKEN_ACCOUNT.to_string(),
+                ),
+                refresh_token.to_string(),
+            );
+            store
+        }
+
+        fn set_get_error(&self, error: SecretStoreError) {
+            *self.get_error.lock().unwrap() = Some(error);
+        }
+    }
+
+    impl SecretStore for FakeSecretStore {
+        fn get_secret(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<Option<String>, SecretStoreError> {
+            if let Some(error) = self.get_error.lock().unwrap().clone() {
+                return Err(error);
+            }
+
+            Ok(self
+                .secrets
+                .lock()
+                .unwrap()
+                .get(&(service.to_string(), account.to_string()))
+                .cloned())
+        }
+
+        fn set_secret(
+            &self,
+            service: &str,
+            account: &str,
+            secret: &str,
+        ) -> std::result::Result<(), SecretStoreError> {
+            self.secrets.lock().unwrap().insert(
+                (service.to_string(), account.to_string()),
+                secret.to_string(),
+            );
+            Ok(())
+        }
+
+        fn delete_secret(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<bool, SecretStoreError> {
+            Ok(self
+                .secrets
+                .lock()
+                .unwrap()
+                .remove(&(service.to_string(), account.to_string()))
+                .is_some())
+        }
+    }
 
     fn render_help(command: &mut Command) -> String {
         let mut buffer = Vec::new();
@@ -906,5 +1001,45 @@ mod tests {
         .unwrap();
         let debug = format!("{cli:?}");
         assert!(debug.contains("Campaigns"));
+    }
+
+    #[test]
+    fn tiktok_refresh_token_prefers_shell_env_over_secret_store() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::set_var(TIKTOK_REFRESH_TOKEN_ENV_VAR, "env-refresh-token");
+        let store = FakeSecretStore::with_tiktok_refresh_token("stored-refresh-token");
+
+        let refresh_token = resolve_tiktok_refresh_token(&store).unwrap();
+
+        assert_eq!(refresh_token, "env-refresh-token");
+        env::remove_var(TIKTOK_REFRESH_TOKEN_ENV_VAR);
+    }
+
+    #[test]
+    fn tiktok_refresh_token_falls_back_to_secret_store() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var(TIKTOK_REFRESH_TOKEN_ENV_VAR);
+        let store = FakeSecretStore::with_tiktok_refresh_token("stored-refresh-token");
+
+        let refresh_token = resolve_tiktok_refresh_token(&store).unwrap();
+
+        assert_eq!(refresh_token, "stored-refresh-token");
+    }
+
+    #[test]
+    fn tiktok_refresh_token_reports_store_errors_when_env_missing() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var(TIKTOK_REFRESH_TOKEN_ENV_VAR);
+        let store = FakeSecretStore::default();
+        store.set_get_error(SecretStoreError::new(
+            SecretStoreErrorKind::Unavailable,
+            "secure storage backend is unavailable".to_string(),
+        ));
+
+        let error = resolve_tiktok_refresh_token(&store).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("secure storage backend is unavailable"));
     }
 }

@@ -10,9 +10,11 @@ dependencies = [
  "clap",
  "rpassword",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "wiremock",
 ]
 
 [[package]]

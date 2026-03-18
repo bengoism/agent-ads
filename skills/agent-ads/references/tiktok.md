@@ -33,6 +33,8 @@ Persistent local auth is stored with `agent-ads tiktok auth set`.
 
 Token precedence: shell env > OS credential store
 
+Refresh token precedence for `auth refresh`: `TIKTOK_ADS_REFRESH_TOKEN` > OS credential store
+
 Non-secret precedence: CLI flags > shell env > `agent-ads.config.json` (under `providers.tiktok`)
 
 ### Output defaults

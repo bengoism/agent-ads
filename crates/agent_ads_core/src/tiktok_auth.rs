@@ -44,6 +44,7 @@ pub struct RefreshResult {
 pub async fn refresh_access_token(
     api_base_url: &str,
     api_version: &str,
+    timeout_seconds: u64,
     app_id: &str,
     app_secret: &str,
     refresh_token: &str,
@@ -61,7 +62,7 @@ pub async fn refresh_access_token(
     body.insert("refresh_token", refresh_token);
 
     let http = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(timeout_seconds))
         .build()?;
 
     let response = http.post(&url).json(&body).send().await?;

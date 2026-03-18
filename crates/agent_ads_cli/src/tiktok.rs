@@ -1,4 +1,3 @@
-use std::env;
 use std::path::{Path, PathBuf};
 
 use agent_ads_core::output::{OutputEnvelope, OutputMeta};
@@ -7,8 +6,7 @@ use agent_ads_core::tiktok_auth::refresh_access_token;
 use agent_ads_core::tiktok_client::{TikTokClient, TikTokResponse};
 use agent_ads_core::tiktok_config::{
     tiktok_inspect_access_token, TikTokAccessTokenSource, TikTokAccessTokenStatus,
-    TikTokConfigOverrides, TikTokConfigSnapshot, TikTokResolvedConfig, TIKTOK_DEFAULT_API_BASE_URL,
-    TIKTOK_DEFAULT_API_VERSION,
+    TikTokConfigOverrides, TikTokConfigSnapshot, TikTokResolvedConfig, TIKTOK_DEFAULT_API_VERSION,
 };
 use agent_ads_core::tiktok_endpoints::{
     accounts, adgroups, ads, audiences, campaigns, creative, pixels, reports,
@@ -343,7 +341,7 @@ pub fn handle_auth(
 ) -> Result<CommandResult, TikTokError> {
     match command {
         AuthCommand::Set(args) => {
-            let token = resolve_tiktok_auth_token_input(&args)?;
+            let (token, refresh_token) = resolve_tiktok_auth_inputs(&args)?;
             secret_store
                 .set_secret(
                     TIKTOK_ACCESS_TOKEN_SERVICE,
@@ -359,25 +357,15 @@ pub fn handle_auth(
                 "credential_store_account": TIKTOK_ACCESS_TOKEN_ACCOUNT,
             });
 
-            if args.refresh_token {
-                let refresh = if args.stdin {
-                    read_input(Path::new("-")).map_err(|e| TikTokError::Config(e.to_string()))?
-                } else {
-                    prompt_password("TikTok refresh token: ").map_err(TikTokError::Io)?
-                };
-                let refresh = refresh.trim().to_string();
-                if !refresh.is_empty() {
-                    secret_store
-                        .set_secret(
-                            TIKTOK_REFRESH_TOKEN_SERVICE,
-                            TIKTOK_REFRESH_TOKEN_ACCOUNT,
-                            &refresh,
-                        )
-                        .map_err(|error| {
-                            tiktok_auth_storage_error("store refresh token", &error)
-                        })?;
-                    result["refresh_token_stored"] = json!(true);
-                }
+            if let Some(refresh_token) = refresh_token {
+                secret_store
+                    .set_secret(
+                        TIKTOK_REFRESH_TOKEN_SERVICE,
+                        TIKTOK_REFRESH_TOKEN_ACCOUNT,
+                        &refresh_token,
+                    )
+                    .map_err(|error| tiktok_auth_storage_error("store refresh token", &error))?;
+                result["refresh_token_stored"] = json!(true);
             }
 
             Ok(tiktok_command_result(result, "/tiktok/auth/set", 0))
@@ -417,23 +405,17 @@ pub async fn handle_auth_refresh(
     app_secret: &str,
     refresh_token: &str,
     secret_store: &dyn SecretStore,
-    overrides: &TikTokConfigOverrides,
+    snapshot: &TikTokConfigSnapshot,
 ) -> Result<CommandResult, TikTokError> {
-    let env_base = env::var("TIKTOK_ADS_API_BASE_URL").ok();
-    let api_base_url = overrides
-        .api_base_url
-        .as_deref()
-        .or(env_base.as_deref())
-        .unwrap_or(TIKTOK_DEFAULT_API_BASE_URL);
-    let env_ver = env::var("TIKTOK_ADS_API_VERSION").ok();
-    let api_version = overrides
-        .api_version
-        .as_deref()
-        .or(env_ver.as_deref())
-        .unwrap_or(TIKTOK_DEFAULT_API_VERSION);
-
-    let result =
-        refresh_access_token(api_base_url, api_version, app_id, app_secret, refresh_token).await?;
+    let result = refresh_access_token(
+        &snapshot.api_base_url,
+        &snapshot.api_version,
+        snapshot.timeout_seconds,
+        app_id,
+        app_secret,
+        refresh_token,
+    )
+    .await?;
 
     // Store the new access token
     secret_store
@@ -455,7 +437,7 @@ pub async fn handle_auth_refresh(
             .map_err(|error| tiktok_auth_storage_error("store new refresh token", &error))?;
     }
 
-    Ok(tiktok_command_result(
+    Ok(command_result(
         json!({
             "provider": "tiktok",
             "refreshed": true,
@@ -465,6 +447,7 @@ pub async fn handle_auth_refresh(
         }),
         "/tiktok/auth/refresh",
         0,
+        Some(&snapshot.api_version),
     ))
 }
 
@@ -962,18 +945,64 @@ fn resolve_tiktok_filter(
     Ok(None)
 }
 
-fn resolve_tiktok_auth_token_input(args: &AuthSetArgs) -> Result<String, TikTokError> {
-    let token = if args.stdin {
-        read_input(Path::new("-")).map_err(|e| TikTokError::Config(e.to_string()))?
+fn resolve_tiktok_auth_inputs(args: &AuthSetArgs) -> Result<(String, Option<String>), TikTokError> {
+    if args.stdin {
+        let input = read_input(Path::new("-")).map_err(|e| TikTokError::Config(e.to_string()))?;
+        return parse_tiktok_auth_inputs_from_stdin(&input, args.refresh_token);
+    }
+
+    let access_token = normalize_tiktok_token(
+        &prompt_password("TikTok access token: ").map_err(TikTokError::Io)?,
+        "access token",
+    )?;
+    let refresh_token = if args.refresh_token {
+        Some(normalize_tiktok_token(
+            &prompt_password("TikTok refresh token: ").map_err(TikTokError::Io)?,
+            "refresh token",
+        )?)
     } else {
-        prompt_password("TikTok access token: ").map_err(TikTokError::Io)?
+        None
     };
 
-    let token = token.trim().to_string();
+    Ok((access_token, refresh_token))
+}
+
+fn parse_tiktok_auth_inputs_from_stdin(
+    input: &str,
+    expect_refresh_token: bool,
+) -> Result<(String, Option<String>), TikTokError> {
+    if !expect_refresh_token {
+        return Ok((normalize_tiktok_token(input, "token")?, None));
+    }
+
+    let tokens: Vec<&str> = input
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    match tokens.as_slice() {
+        [access_token, refresh_token] => Ok((
+            access_token.to_string(),
+            Some(refresh_token.to_string()),
+        )),
+        [] => Err(TikTokError::InvalidArgument(
+            "stdin did not contain an access token".to_string(),
+        )),
+        [_] => Err(TikTokError::InvalidArgument(
+            "stdin did not contain a refresh token; provide the access token on the first line and the refresh token on the second".to_string(),
+        )),
+        _ => Err(TikTokError::InvalidArgument(
+            "stdin contained too many non-empty lines; expected access token on the first line and refresh token on the second".to_string(),
+        )),
+    }
+}
+
+fn normalize_tiktok_token(value: &str, token_kind: &str) -> Result<String, TikTokError> {
+    let token = value.trim().to_string();
     if token.is_empty() {
-        return Err(TikTokError::InvalidArgument(
-            "token input was empty".to_string(),
-        ));
+        return Err(TikTokError::InvalidArgument(format!(
+            "{token_kind} input was empty"
+        )));
     }
 
     Ok(token)
@@ -1044,4 +1073,163 @@ fn tiktok_auth_status_payload(status: TikTokAccessTokenStatus) -> Value {
         "keychain_token_present": status.keychain_token_present,
         "credential_store_error": status.credential_store_error,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    use agent_ads_core::secret_store::{SecretStore, SecretStoreError};
+    use serde_json::json;
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
+
+    #[derive(Default)]
+    struct FakeSecretStore {
+        secrets: Mutex<HashMap<(String, String), String>>,
+    }
+
+    impl SecretStore for FakeSecretStore {
+        fn get_secret(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<Option<String>, SecretStoreError> {
+            Ok(self
+                .secrets
+                .lock()
+                .unwrap()
+                .get(&(service.to_string(), account.to_string()))
+                .cloned())
+        }
+
+        fn set_secret(
+            &self,
+            service: &str,
+            account: &str,
+            secret: &str,
+        ) -> std::result::Result<(), SecretStoreError> {
+            self.secrets.lock().unwrap().insert(
+                (service.to_string(), account.to_string()),
+                secret.to_string(),
+            );
+            Ok(())
+        }
+
+        fn delete_secret(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<bool, SecretStoreError> {
+            Ok(self
+                .secrets
+                .lock()
+                .unwrap()
+                .remove(&(service.to_string(), account.to_string()))
+                .is_some())
+        }
+    }
+
+    fn test_snapshot(
+        api_base_url: &str,
+        api_version: &str,
+        timeout_seconds: u64,
+    ) -> TikTokConfigSnapshot {
+        TikTokConfigSnapshot {
+            config_path: PathBuf::from("agent-ads.config.json"),
+            config_file_exists: true,
+            access_token_present: false,
+            access_token_source: TikTokAccessTokenSource::Missing,
+            credential_store_available: true,
+            keychain_token_present: false,
+            credential_store_error: None,
+            api_base_url: api_base_url.to_string(),
+            api_version: api_version.to_string(),
+            timeout_seconds,
+            default_advertiser_id: None,
+            output_format: agent_ads_core::output::OutputFormat::Json,
+        }
+    }
+
+    #[test]
+    fn parse_stdin_auth_inputs_supports_access_token_only() {
+        let (access_token, refresh_token) =
+            parse_tiktok_auth_inputs_from_stdin("  access-token  \n", false).unwrap();
+
+        assert_eq!(access_token, "access-token");
+        assert_eq!(refresh_token, None);
+    }
+
+    #[test]
+    fn parse_stdin_auth_inputs_requires_refresh_token_when_requested() {
+        let error = parse_tiktok_auth_inputs_from_stdin("access-token\n", true).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("stdin did not contain a refresh token"));
+    }
+
+    #[test]
+    fn parse_stdin_auth_inputs_reads_access_and_refresh_tokens() {
+        let (access_token, refresh_token) =
+            parse_tiktok_auth_inputs_from_stdin(" access-token \n refresh-token \n", true).unwrap();
+
+        assert_eq!(access_token, "access-token");
+        assert_eq!(refresh_token.as_deref(), Some("refresh-token"));
+    }
+
+    #[tokio::test]
+    async fn handle_auth_refresh_uses_snapshot_api_settings() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/open_api/v9.9/oauth2/access_token/"))
+            .and(header("content-type", "application/json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "code": 0,
+                "message": "OK",
+                "request_id": "req-123",
+                "data": {
+                    "access_token": "new-access-token",
+                    "refresh_token": "new-refresh-token",
+                    "access_token_expire_in": 86400,
+                    "refresh_token_expire_in": 31536000
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let store = FakeSecretStore::default();
+        let snapshot = test_snapshot(&server.uri(), "v9.9", 5);
+
+        let result = handle_auth_refresh(
+            "app-id",
+            "app-secret",
+            "stored-refresh-token",
+            &store,
+            &snapshot,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(
+            store
+                .get_secret(TIKTOK_ACCESS_TOKEN_SERVICE, TIKTOK_ACCESS_TOKEN_ACCOUNT)
+                .unwrap()
+                .as_deref(),
+            Some("new-access-token")
+        );
+        assert_eq!(
+            store
+                .get_secret(TIKTOK_REFRESH_TOKEN_SERVICE, TIKTOK_REFRESH_TOKEN_ACCOUNT)
+                .unwrap()
+                .as_deref(),
+            Some("new-refresh-token")
+        );
+        assert_eq!(result.envelope.meta.api_version, "v9.9");
+    }
 }

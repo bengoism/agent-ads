@@ -24,6 +24,10 @@ agent-ads tiktok auth set --refresh-token
 # Option 3: Pipe from stdin
 echo "$TOKEN" | agent-ads tiktok auth set --stdin
 
+# Option 3b: Pipe both access + refresh tokens from stdin
+printf '%s\n%s\n' "$ACCESS_TOKEN" "$REFRESH_TOKEN" | \
+  agent-ads tiktok auth set --stdin --refresh-token
+
 # Option 4: Shell env (CI / ephemeral)
 export TIKTOK_ADS_ACCESS_TOKEN=your_token_here
 ```
@@ -39,8 +43,11 @@ agent-ads tiktok auth refresh \
 # Or use env vars
 export TIKTOK_ADS_APP_ID=your_app_id
 export TIKTOK_ADS_APP_SECRET=your_app_secret
+export TIKTOK_ADS_REFRESH_TOKEN=your_refresh_token
 agent-ads tiktok auth refresh
 ```
+
+`auth refresh` resolves the refresh token from `TIKTOK_ADS_REFRESH_TOKEN` first, then falls back to the OS credential store.
 
 This stores the new access token (and updated refresh token) in the OS credential store.
 
