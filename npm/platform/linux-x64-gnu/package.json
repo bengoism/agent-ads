@@ -1,6 +1,6 @@
 {
   "name": "agent-ads-linux-x64-gnu",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Linux x64 GNU binary for the agent-ads CLI",
   "author": "bengoism",
   "os": [
