@@ -1,0 +1,20 @@
+[package]
+name = "meta_ads_cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "agent-ads"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+meta_ads_core = { path = "../meta_ads_core" }
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

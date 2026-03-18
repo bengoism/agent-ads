@@ -1,0 +1,14 @@
+{
+  "output_format": "json",
+  "providers": {
+    "meta": {
+      "api_base_url": "https://graph.facebook.com",
+      "api_version": "v25.0",
+      "timeout_seconds": 60,
+      "default_business_id": "1234567890",
+      "default_account_id": "act_1234567890"
+    },
+    "google": {},
+    "tiktok": {}
+  }
+}

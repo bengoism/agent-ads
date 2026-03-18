@@ -1,0 +1,32 @@
+{
+  "name": "agent-ads-win32-x64-msvc",
+  "version": "0.1.0",
+  "description": "Windows x64 MSVC binary for the agent-ads CLI",
+  "author": "bengoism",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin",
+    "index.js",
+    "index.d.ts"
+  ],
+  "type": "commonjs",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bengoism/agent-ads.git"
+  },
+  "homepage": "https://github.com/bengoism/agent-ads",
+  "bugs": {
+    "url": "https://github.com/bengoism/agent-ads/issues"
+  },
+  "publishConfig": {
+    "provenance": true
+  }
+}

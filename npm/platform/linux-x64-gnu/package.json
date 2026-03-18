@@ -1,0 +1,32 @@
+{
+  "name": "agent-ads-linux-x64-gnu",
+  "version": "0.1.0",
+  "description": "Linux x64 GNU binary for the agent-ads CLI",
+  "author": "bengoism",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin",
+    "index.js",
+    "index.d.ts"
+  ],
+  "type": "commonjs",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bengoism/agent-ads.git"
+  },
+  "homepage": "https://github.com/bengoism/agent-ads",
+  "bugs": {
+    "url": "https://github.com/bengoism/agent-ads/issues"
+  },
+  "publishConfig": {
+    "provenance": true
+  }
+}

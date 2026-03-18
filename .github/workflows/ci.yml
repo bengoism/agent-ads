@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: Swatinem/rust-cache@v2
+      - name: Install npm dependencies
+        run: npm ci
+      - name: Build npm TypeScript
+        run: npm run build:ts
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Test
+        run: cargo test --workspace
+      - name: Smoke
+        run: cargo run -p meta_ads_cli -- --help
+      - name: Npm Smoke
+        run: npm run test:smoke
+      - name: Npm Pack Dry Run
+        run: npm pack --dry-run ./npm/agent-ads

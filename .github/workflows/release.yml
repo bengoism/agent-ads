@@ -1,0 +1,84 @@
+name: Release
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            rust_target: aarch64-apple-darwin
+            binary_name: agent-ads
+            dist_name: agent-ads-darwin-arm64
+          - os: macos-13
+            rust_target: x86_64-apple-darwin
+            binary_name: agent-ads
+            dist_name: agent-ads-darwin-x64
+          - os: ubuntu-latest
+            rust_target: aarch64-unknown-linux-gnu
+            binary_name: agent-ads
+            dist_name: agent-ads-linux-arm64-gnu
+          - os: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+            binary_name: agent-ads
+            dist_name: agent-ads-linux-x64-gnu
+          - os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            binary_name: agent-ads.exe
+            dist_name: agent-ads-win32-x64-msvc.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.rust_target }} -p meta_ads_cli
+      - name: Stage binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} dist/${{ matrix.dist_name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.dist_name }}
+          path: dist/${{ matrix.dist_name }}
+
+  npm:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+      - name: Install npm dependencies
+        run: npm ci
+      - name: Build npm TypeScript
+        run: npm run build:ts
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Flatten artifacts
+        run: |
+          mkdir -p dist-flat
+          find dist -type f -maxdepth 2 -exec cp {} dist-flat/ \;
+      - name: Prepare packages
+        run: |
+          AGENT_ADS_VERSION="${GITHUB_REF_NAME#v}" \
+          AGENT_ADS_BINARY_DIR="${GITHUB_WORKSPACE}/dist-flat" \
+          node npm/agent-ads/scripts/prepare-release.js
+      - name: Publish npm packages
+        run: node npm/agent-ads/scripts/publish-release.js
