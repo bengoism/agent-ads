@@ -33,13 +33,17 @@ The npm package is a thin CLI launcher. There is no supported JavaScript API.
 
 ### 1. Authenticate
 
-Meta requires an access token. Set it as an environment variable or in a `.env` file:
+Meta requires an access token. Store it once in your OS credential store:
+
+```bash
+agent-ads meta auth set
+```
+
+For CI, headless Linux, or one-off overrides, you can still set a shell variable for the current process:
 
 ```bash
 export META_ADS_ACCESS_TOKEN=EAABs...
 ```
-
-Or create a `.env` file in the current directory with the same variable.
 
 **Required permission:** `ads_read` — read access to campaigns, insights, creatives, and pixels.
 
@@ -48,6 +52,8 @@ Or create a `.env` file in the current directory with the same variable.
 Both permissions are read-only. The CLI never creates, modifies, or deletes anything.
 
 Generate a token at the [Graph API Explorer](https://developers.facebook.com/tools/explorer/) — select your app, add the permissions above, and click "Generate Access Token".
+
+On Linux, persistent secure storage requires a running Secret Service provider such as GNOME Keyring or KWallet. If secure storage is unavailable, use `META_ADS_ACCESS_TOKEN` in the shell for that session.
 
 ### 2. Verify your setup
 
@@ -59,9 +65,9 @@ agent-ads meta doctor
 {
   "ok": true,
   "checks": [
-    { "name": "env_file", "ok": true, "detail": "loaded auto-discovered env file from /work/.env" },
+    { "name": "credential_store", "ok": true, "detail": "stored Meta token found in OS credential store" },
     { "name": "config_file", "ok": true, "detail": "using /work/agent-ads.config.json" },
-    { "name": "access_token", "ok": true, "detail": "META_ADS_ACCESS_TOKEN is set" }
+    { "name": "access_token", "ok": true, "detail": "using stored Meta token from the OS credential store" }
   ]
 }
 ```
@@ -183,6 +189,9 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 
 | Command | Description |
 |---------|-------------|
+| `meta auth set` | Store the Meta token in the OS credential store |
+| `meta auth status` | Show auth source and secure storage status |
+| `meta auth delete` | Delete the stored Meta token |
 | `meta config path` | Show resolved config file path |
 | `meta config show` | Show full resolved configuration |
 | `meta config validate` | Validate config file |
@@ -195,7 +204,6 @@ These flags work with any command:
 | Flag | Description |
 |------|-------------|
 | `--config <path>` | Config file path (default: `agent-ads.config.json`) |
-| `--env-file <path>` | Env file path (default: `./.env`) |
 | `--api-base-url <url>` | Override Meta API base URL |
 | `--api-version <version>` | Override API version (e.g. `v25.0`) |
 | `--timeout-seconds <n>` | HTTP request timeout |
@@ -222,9 +230,18 @@ Use `--all` to fetch everything, or `--max-items 100` to cap results. Without ei
 
 ## Configuration
 
-### Precedence
+### Secret resolution
 
-CLI flags > shell environment > `.env` file > `agent-ads.config.json`
+`META_ADS_ACCESS_TOKEN` resolves in this order:
+
+1. Shell environment (`META_ADS_ACCESS_TOKEN`)
+2. OS credential store (`agent-ads meta auth set`)
+
+`.env` files are not read.
+
+### Non-secret precedence
+
+CLI flags > shell environment > `agent-ads.config.json`
 
 ### Config file
 
@@ -257,9 +274,9 @@ Setting `default_business_id` and `default_account_id` lets you omit `--business
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `META_ADS_ACCESS_TOKEN` | Yes | Meta API access token |
+| `META_ADS_ACCESS_TOKEN` | No | Shell override / CI fallback for the Meta API access token |
 
-Secrets are never read from config files or CLI flags — only from environment variables.
+Secrets are never read from config files or CLI flags. Persistent secrets live in the OS credential store; shell environment variables remain supported for temporary runs and CI.
 
 ## Output
 

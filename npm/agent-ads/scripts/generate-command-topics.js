@@ -70,6 +70,11 @@ const sections = [
         language: "text"
     },
     {
+        title: "Meta Auth",
+        args: ["meta", "auth", "--help"],
+        language: "text"
+    },
+    {
         title: "Meta Config",
         args: ["meta", "config", "--help"],
         language: "text"

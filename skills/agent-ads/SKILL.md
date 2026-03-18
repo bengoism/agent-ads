@@ -45,7 +45,6 @@ These flags work with every command and every provider:
 | Flag | Default | What it does |
 |------|---------|-------------|
 | `--config <path>` | `agent-ads.config.json` | Config file path |
-| `--env-file <path>` | `./.env` | Env file for secrets |
 | `--format json\|jsonl\|csv` | `json` | Output format |
 | `--output <path>` | stdout | Write to file (`-` for stdout) |
 | `--pretty` | off | Pretty-print JSON |
@@ -83,6 +82,12 @@ The user's `META_ADS_ACCESS_TOKEN` needs specific Meta permissions (scopes) depe
 | `business_management` | `businesses list` and `ad-accounts list` (discovery) |
 
 Both are read-only — no write access is granted. If the user gets a "Missing Permission" error, they need to regenerate their token with the correct scopes at the [Graph API Explorer](https://developers.facebook.com/tools/explorer/).
+
+## Auth Storage
+
+- Persistent auth: `agent-ads meta auth set`
+- Shell override / CI fallback: `META_ADS_ACCESS_TOKEN=... agent-ads ...`
+- Linux secure storage requires a running Secret Service provider such as GNOME Keyring or KWallet
 
 ## Worked Example
 

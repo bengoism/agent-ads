@@ -6,12 +6,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{MetaAdsError, Result};
 use crate::output::OutputFormat;
+use crate::secret_store::{
+    SecretStore, SecretStoreErrorKind, META_ACCESS_TOKEN_ACCOUNT, META_ACCESS_TOKEN_SERVICE,
+};
 
 pub const DEFAULT_CONFIG_FILE: &str = "agent-ads.config.json";
-pub const DEFAULT_ENV_FILE: &str = ".env";
 pub const DEFAULT_API_BASE_URL: &str = "https://graph.facebook.com";
 pub const DEFAULT_API_VERSION: &str = "v25.0";
 const DEFAULT_TIMEOUT_SECONDS: u64 = 60;
+const ACCESS_TOKEN_ENV_VAR: &str = "META_ADS_ACCESS_TOKEN";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FileConfig {
@@ -58,34 +61,34 @@ pub struct ResolvedConfig {
     pub config_path: PathBuf,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum EnvFileSource {
-    Auto,
-    Explicit,
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AccessTokenSource {
+    ShellEnv,
+    Keychain,
+    Missing,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct EnvFileState {
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AccessTokenStatus {
+    pub access_token_present: bool,
+    pub access_token_source: AccessTokenSource,
+    pub credential_store_available: bool,
+    pub keychain_token_present: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub env_file_path: Option<PathBuf>,
-    pub env_file_exists: bool,
-    pub env_file_loaded: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub env_file_source: Option<EnvFileSource>,
+    pub credential_store_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ConfigSnapshot {
     pub config_path: PathBuf,
     pub config_file_exists: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub env_file_path: Option<PathBuf>,
-    pub env_file_exists: bool,
-    pub env_file_loaded: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub env_file_source: Option<EnvFileSource>,
     pub access_token_present: bool,
+    pub access_token_source: AccessTokenSource,
+    pub credential_store_available: bool,
+    pub keychain_token_present: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_store_error: Option<String>,
     pub api_base_url: String,
     pub api_version: String,
     pub timeout_seconds: u64,
@@ -94,19 +97,22 @@ pub struct ConfigSnapshot {
     pub output_format: OutputFormat,
 }
 
+struct AccessTokenResolution {
+    token: Option<String>,
+    status: AccessTokenStatus,
+}
+
 impl ResolvedConfig {
     pub fn load(
         config_path: Option<&Path>,
-        env_file_state: &EnvFileState,
+        secret_store: &dyn SecretStore,
         overrides: &ConfigOverrides,
     ) -> Result<Self> {
-        let snapshot = inspect(config_path, env_file_state, overrides)?;
-        let access_token = env::var("META_ADS_ACCESS_TOKEN").map_err(|_| {
-            MetaAdsError::Config(
-                "META_ADS_ACCESS_TOKEN must be set in the shell or a loaded .env file; secrets are not read from config files"
-                    .to_string(),
-            )
-        })?;
+        let token_resolution = resolve_access_token(secret_store);
+        let snapshot = inspect_with_status(config_path, &token_resolution.status, overrides)?;
+        let access_token = token_resolution
+            .token
+            .ok_or_else(|| missing_access_token_error(&token_resolution.status))?;
 
         Ok(Self {
             access_token,
@@ -121,14 +127,22 @@ impl ResolvedConfig {
     }
 }
 
-pub fn load_env(env_file: Option<&Path>) -> Result<EnvFileState> {
-    let cwd = env::current_dir()?;
-    load_env_with_cwd(env_file, &cwd)
+pub fn inspect_access_token(secret_store: &dyn SecretStore) -> AccessTokenStatus {
+    resolve_access_token(secret_store).status
 }
 
 pub fn inspect(
     config_path: Option<&Path>,
-    env_file_state: &EnvFileState,
+    secret_store: &dyn SecretStore,
+    overrides: &ConfigOverrides,
+) -> Result<ConfigSnapshot> {
+    let token_status = inspect_access_token(secret_store);
+    inspect_with_status(config_path, &token_status, overrides)
+}
+
+fn inspect_with_status(
+    config_path: Option<&Path>,
+    token_status: &AccessTokenStatus,
     overrides: &ConfigOverrides,
 ) -> Result<ConfigSnapshot> {
     let config_path = config_path
@@ -180,11 +194,11 @@ pub fn inspect(
     Ok(ConfigSnapshot {
         config_file_exists: config_path.exists(),
         config_path,
-        env_file_path: env_file_state.env_file_path.clone(),
-        env_file_exists: env_file_state.env_file_exists,
-        env_file_loaded: env_file_state.env_file_loaded,
-        env_file_source: env_file_state.env_file_source.clone(),
-        access_token_present: env::var("META_ADS_ACCESS_TOKEN").is_ok(),
+        access_token_present: token_status.access_token_present,
+        access_token_source: token_status.access_token_source,
+        credential_store_available: token_status.credential_store_available,
+        keychain_token_present: token_status.keychain_token_present,
+        credential_store_error: token_status.credential_store_error.clone(),
         api_base_url,
         api_version,
         timeout_seconds,
@@ -194,53 +208,87 @@ pub fn inspect(
     })
 }
 
-fn load_env_with_cwd(env_file: Option<&Path>, cwd: &Path) -> Result<EnvFileState> {
-    let (path, source) = match env_file {
-        Some(path) => (path.to_path_buf(), EnvFileSource::Explicit),
-        None => (cwd.join(DEFAULT_ENV_FILE), EnvFileSource::Auto),
-    };
+fn resolve_access_token(secret_store: &dyn SecretStore) -> AccessTokenResolution {
+    let shell_token = env::var(ACCESS_TOKEN_ENV_VAR).ok();
+    let keychain_result =
+        secret_store.get_secret(META_ACCESS_TOKEN_SERVICE, META_ACCESS_TOKEN_ACCOUNT);
 
-    if !path.exists() {
-        if source == EnvFileSource::Explicit {
-            return Err(MetaAdsError::Config(format!(
-                "env file not found at {}",
-                path.display()
-            )));
-        }
-
-        return Ok(EnvFileState {
-            env_file_path: Some(path),
-            env_file_exists: false,
-            env_file_loaded: false,
-            env_file_source: Some(source),
-        });
+    match (shell_token, keychain_result) {
+        (Some(shell_token), Ok(keychain_token)) => AccessTokenResolution {
+            token: Some(shell_token),
+            status: AccessTokenStatus {
+                access_token_present: true,
+                access_token_source: AccessTokenSource::ShellEnv,
+                credential_store_available: true,
+                keychain_token_present: keychain_token.is_some(),
+                credential_store_error: None,
+            },
+        },
+        (Some(shell_token), Err(error)) => AccessTokenResolution {
+            token: Some(shell_token),
+            status: AccessTokenStatus {
+                access_token_present: true,
+                access_token_source: AccessTokenSource::ShellEnv,
+                credential_store_available: error.kind() != SecretStoreErrorKind::Unavailable,
+                keychain_token_present: false,
+                credential_store_error: Some(error.to_string()),
+            },
+        },
+        (None, Ok(Some(keychain_token))) => AccessTokenResolution {
+            token: Some(keychain_token),
+            status: AccessTokenStatus {
+                access_token_present: true,
+                access_token_source: AccessTokenSource::Keychain,
+                credential_store_available: true,
+                keychain_token_present: true,
+                credential_store_error: None,
+            },
+        },
+        (None, Ok(None)) => AccessTokenResolution {
+            token: None,
+            status: AccessTokenStatus {
+                access_token_present: false,
+                access_token_source: AccessTokenSource::Missing,
+                credential_store_available: true,
+                keychain_token_present: false,
+                credential_store_error: None,
+            },
+        },
+        (None, Err(error)) => AccessTokenResolution {
+            token: None,
+            status: AccessTokenStatus {
+                access_token_present: false,
+                access_token_source: AccessTokenSource::Missing,
+                credential_store_available: error.kind() != SecretStoreErrorKind::Unavailable,
+                keychain_token_present: false,
+                credential_store_error: Some(error.to_string()),
+            },
+        },
     }
+}
 
-    let entries = dotenvy::from_path_iter(&path).map_err(|error| {
-        MetaAdsError::Config(format!(
-            "failed to read env file {}: {error}",
-            path.display()
-        ))
-    })?;
-
-    for entry in entries {
-        let (key, value) = entry.map_err(|error| {
-            MetaAdsError::Config(format!(
-                "failed to parse env file {}: {error}",
-                path.display()
-            ))
-        })?;
-        if env::var_os(&key).is_none() {
-            env::set_var(&key, &value);
-        }
+fn missing_access_token_error(status: &AccessTokenStatus) -> MetaAdsError {
+    let guidance = access_token_guidance();
+    match status.credential_store_error.as_deref() {
+        Some(detail) => MetaAdsError::Config(format!(
+            "{ACCESS_TOKEN_ENV_VAR} is missing and the OS credential store could not be read: {detail}. {guidance}"
+        )),
+        None => MetaAdsError::Config(format!(
+            "{ACCESS_TOKEN_ENV_VAR} is missing. {guidance}"
+        )),
     }
+}
 
-    Ok(EnvFileState {
-        env_file_path: Some(path),
-        env_file_exists: true,
-        env_file_loaded: true,
-        env_file_source: Some(source),
-    })
+fn access_token_guidance() -> String {
+    let mut message = format!(
+        "Set {ACCESS_TOKEN_ENV_VAR} in the shell for this process or run `agent-ads meta auth set` to store it in your OS credential store."
+    );
+    if cfg!(target_os = "linux") {
+        message.push_str(
+            " On Linux, secure storage requires a running Secret Service provider such as GNOME Keyring or KWallet.",
+        );
+    }
+    message
 }
 
 fn load_file_config(path: &Path) -> Result<FileConfig> {
@@ -269,18 +317,102 @@ fn merge_file_config(base: FileConfig, overlay: FileConfig) -> FileConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::env;
     use std::fs;
     use std::sync::{LazyLock, Mutex};
 
     use tempfile::tempdir;
 
-    use super::{
-        load_env_with_cwd, ConfigOverrides, EnvFileSource, ResolvedConfig, DEFAULT_ENV_FILE,
-    };
+    use super::{inspect_access_token, AccessTokenSource, ConfigOverrides, ResolvedConfig};
     use crate::output::OutputFormat;
+    use crate::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
+    use crate::{inspect, META_ACCESS_TOKEN_ACCOUNT, META_ACCESS_TOKEN_SERVICE};
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    #[derive(Default)]
+    struct FakeSecretStore {
+        secrets: Mutex<HashMap<(String, String), String>>,
+        get_error: Mutex<Option<SecretStoreError>>,
+        set_error: Mutex<Option<SecretStoreError>>,
+        delete_error: Mutex<Option<SecretStoreError>>,
+    }
+
+    impl FakeSecretStore {
+        fn with_secret(secret: &str) -> Self {
+            let store = Self::default();
+            store.put_secret(secret);
+            store
+        }
+
+        fn put_secret(&self, secret: &str) {
+            self.secrets.lock().unwrap().insert(
+                (
+                    META_ACCESS_TOKEN_SERVICE.to_string(),
+                    META_ACCESS_TOKEN_ACCOUNT.to_string(),
+                ),
+                secret.to_string(),
+            );
+        }
+
+        fn set_get_error(&self, error: SecretStoreError) {
+            *self.get_error.lock().unwrap() = Some(error);
+        }
+    }
+
+    impl SecretStore for FakeSecretStore {
+        fn get_secret(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<Option<String>, SecretStoreError> {
+            if let Some(error) = self.get_error.lock().unwrap().clone() {
+                return Err(error);
+            }
+
+            Ok(self
+                .secrets
+                .lock()
+                .unwrap()
+                .get(&(service.to_string(), account.to_string()))
+                .cloned())
+        }
+
+        fn set_secret(
+            &self,
+            service: &str,
+            account: &str,
+            secret: &str,
+        ) -> std::result::Result<(), SecretStoreError> {
+            if let Some(error) = self.set_error.lock().unwrap().clone() {
+                return Err(error);
+            }
+
+            self.secrets.lock().unwrap().insert(
+                (service.to_string(), account.to_string()),
+                secret.to_string(),
+            );
+            Ok(())
+        }
+
+        fn delete_secret(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<bool, SecretStoreError> {
+            if let Some(error) = self.delete_error.lock().unwrap().clone() {
+                return Err(error);
+            }
+
+            Ok(self
+                .secrets
+                .lock()
+                .unwrap()
+                .remove(&(service.to_string(), account.to_string()))
+                .is_some())
+        }
+    }
 
     fn clear_meta_env() {
         for key in [
@@ -301,6 +433,7 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_meta_env();
 
+        let store = FakeSecretStore::with_secret("keychain-token");
         let dir = tempdir().unwrap();
         let path = dir.path().join("agent-ads.config.json");
         fs::write(
@@ -309,13 +442,12 @@ mod tests {
         )
         .unwrap();
 
-        env::set_var("META_ADS_ACCESS_TOKEN", "token");
+        env::set_var("META_ADS_ACCESS_TOKEN", "shell-token");
         env::set_var("META_ADS_API_VERSION", "v25.0");
 
-        let env_state = load_env_with_cwd(None, dir.path()).unwrap();
         let config = ResolvedConfig::load(
             Some(&path),
-            &env_state,
+            &store,
             &ConfigOverrides {
                 timeout_seconds: Some(30),
                 ..ConfigOverrides::default()
@@ -323,6 +455,7 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(config.access_token, "shell-token");
         assert_eq!(config.api_version, "v25.0");
         assert_eq!(config.timeout_seconds, 30);
         assert_eq!(config.output_format, OutputFormat::Csv);
@@ -331,98 +464,64 @@ mod tests {
     }
 
     #[test]
-    fn auto_env_file_is_optional() {
+    fn uses_keychain_token_when_shell_env_is_absent() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_meta_env();
 
-        let dir = tempdir().unwrap();
-        let env_state = load_env_with_cwd(None, dir.path()).unwrap();
-
-        assert_eq!(
-            env_state.env_file_path,
-            Some(dir.path().join(DEFAULT_ENV_FILE))
-        );
-        assert!(!env_state.env_file_exists);
-        assert!(!env_state.env_file_loaded);
-        assert_eq!(env_state.env_file_source, Some(EnvFileSource::Auto));
-    }
-
-    #[test]
-    fn auto_env_file_loads_without_overriding_shell_env() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        clear_meta_env();
-
+        let store = FakeSecretStore::with_secret("keychain-token");
         let dir = tempdir().unwrap();
         let config_path = dir.path().join("agent-ads.config.json");
-        let env_path = dir.path().join(DEFAULT_ENV_FILE);
 
         fs::write(
             &config_path,
             r#"{"providers":{"meta":{"api_version":"v23.0"}}}"#,
         )
         .unwrap();
-        fs::write(
-            &env_path,
-            "META_ADS_ACCESS_TOKEN=file_token\nMETA_ADS_API_VERSION=v24.0\n",
-        )
-        .unwrap();
 
-        env::set_var("META_ADS_ACCESS_TOKEN", "shell_token");
-
-        let env_state = load_env_with_cwd(None, dir.path()).unwrap();
         let config =
-            ResolvedConfig::load(Some(&config_path), &env_state, &ConfigOverrides::default())
-                .unwrap();
+            ResolvedConfig::load(Some(&config_path), &store, &ConfigOverrides::default()).unwrap();
+        let snapshot = inspect(Some(&config_path), &store, &ConfigOverrides::default()).unwrap();
 
-        assert_eq!(config.access_token, "shell_token");
-        assert_eq!(config.api_version, "v24.0");
-        assert!(env_state.env_file_loaded);
+        assert_eq!(config.access_token, "keychain-token");
+        assert_eq!(snapshot.access_token_source, AccessTokenSource::Keychain);
+        assert!(snapshot.keychain_token_present);
 
         clear_meta_env();
     }
 
     #[test]
-    fn explicit_env_file_overrides_config_when_shell_env_is_absent() {
+    fn missing_token_errors_with_setup_guidance() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_meta_env();
 
-        let dir = tempdir().unwrap();
-        let config_path = dir.path().join("agent-ads.config.json");
-        let env_path = dir.path().join("custom.env");
+        let store = FakeSecretStore::default();
+        let error = ResolvedConfig::load(None, &store, &ConfigOverrides::default()).unwrap_err();
 
-        fs::write(
-            &config_path,
-            r#"{"providers":{"meta":{"api_version":"v23.0","timeout_seconds":10}}}"#,
-        )
-        .unwrap();
-        fs::write(
-            &env_path,
-            "META_ADS_ACCESS_TOKEN=file_token\nMETA_ADS_API_VERSION=v24.0\nMETA_ADS_TIMEOUT_SECONDS=45\n",
-        )
-        .unwrap();
-
-        let env_state = load_env_with_cwd(Some(&env_path), dir.path()).unwrap();
-        let config =
-            ResolvedConfig::load(Some(&config_path), &env_state, &ConfigOverrides::default())
-                .unwrap();
-
-        assert_eq!(config.access_token, "file_token");
-        assert_eq!(config.api_version, "v24.0");
-        assert_eq!(config.timeout_seconds, 45);
-        assert_eq!(env_state.env_file_source, Some(EnvFileSource::Explicit));
-
-        clear_meta_env();
+        assert!(error.to_string().contains("agent-ads meta auth set"));
     }
 
     #[test]
-    fn explicit_missing_env_file_errors() {
+    fn inspect_reports_unavailable_store_without_breaking_shell_env_override() {
         let _guard = ENV_LOCK.lock().unwrap();
         clear_meta_env();
 
-        let dir = tempdir().unwrap();
-        let error =
-            load_env_with_cwd(Some(&dir.path().join("missing.env")), dir.path()).unwrap_err();
+        let store = FakeSecretStore::default();
+        store.set_get_error(SecretStoreError::new(
+            SecretStoreErrorKind::Unavailable,
+            "secure storage backend is unavailable".to_string(),
+        ));
+        env::set_var("META_ADS_ACCESS_TOKEN", "shell-token");
 
-        assert!(error.to_string().contains("env file not found"));
+        let status = inspect_access_token(&store);
+
+        assert!(status.access_token_present);
+        assert_eq!(status.access_token_source, AccessTokenSource::ShellEnv);
+        assert!(!status.credential_store_available);
+        assert_eq!(
+            status.credential_store_error.as_deref(),
+            Some("secure storage backend is unavailable")
+        );
+
+        clear_meta_env();
     }
 }

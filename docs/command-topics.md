@@ -30,7 +30,6 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -84,13 +83,13 @@ Commands:
   pixels              List tracking pixels
   datasets            Get dataset quality metrics
   pixel-health        Combined pixel health diagnostics
+  auth                Manage stored auth token
   doctor              Verify auth, config, and API connectivity
   config              Inspect and validate configuration
   help                Print this message or the help of the given subcommand(s)
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -121,7 +120,6 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -152,7 +150,6 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -183,7 +180,6 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -215,7 +211,6 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -249,7 +244,6 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -281,7 +275,6 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -312,7 +305,6 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -345,7 +337,38 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Meta Auth
+
+```bash
+agent-ads meta auth --help
+```
+
+```text
+Manage stored auth token
+
+Usage: agent-ads meta auth [OPTIONS] <COMMAND>
+
+Commands:
+  set     Store the Meta token in the OS credential store
+  status  Show auth source and secure storage status
+  delete  Delete the stored Meta token
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
@@ -378,7 +401,6 @@ Commands:
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
-      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
       --api-base-url <API_BASE_URL>        Override API base URL
       --api-version <API_VERSION>          Override API version (e.g. v25.0)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
