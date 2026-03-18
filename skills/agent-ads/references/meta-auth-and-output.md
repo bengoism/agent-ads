@@ -19,23 +19,23 @@ Two environment variables control Meta API access:
 
 Both are read-only — no write access is granted. Generate a token at the [Graph API Explorer](https://developers.facebook.com/tools/explorer/) with the permissions above.
 
-Secrets are **never** read from CLI flags or config files — only from environment variables.
+Secrets are **never** read from CLI flags or config files. Persistent secrets live in the OS credential store, and shell env remains available for overrides or CI.
 
 ### Setting up auth
 
-Option 1 — shell environment:
+Option 1 — store the token in the OS credential store:
+
+```bash
+agent-ads meta auth set
+```
+
+Option 2 — shell environment override:
 
 ```bash
 export META_ADS_ACCESS_TOKEN=EAABs...
 ```
 
-Option 2 — `.env` file in the current directory:
-
-```dotenv
-META_ADS_ACCESS_TOKEN=EAABs...
-```
-
-`agent-ads` auto-loads `./.env` if it exists. Use `--env-file <path>` to load a different file. Existing shell variables always win over `.env` values (the CLI never overwrites what's already set in your shell).
+On Linux, persistent secure storage requires a running Secret Service provider such as GNOME Keyring or KWallet. In headless environments, use the shell variable for that process.
 
 ### Verifying auth
 
@@ -53,9 +53,9 @@ Example `doctor` output:
 {
   "ok": true,
   "checks": [
-    { "name": "env_file", "ok": true, "detail": "loaded auto-discovered env file from /work/.env" },
+    { "name": "credential_store", "ok": true, "detail": "stored Meta token found in OS credential store" },
     { "name": "config_file", "ok": true, "detail": "using /work/agent-ads.config.json" },
-    { "name": "access_token", "ok": true, "detail": "META_ADS_ACCESS_TOKEN is set" },
+    { "name": "access_token", "ok": true, "detail": "using stored Meta token from the OS credential store" },
     { "name": "api_ping", "ok": true, "detail": "token accepted by Meta API; sampled 1 business record(s)" }
   ]
 }
@@ -65,10 +65,14 @@ Example `doctor` output:
 
 Precedence (highest to lowest):
 
+1. Shell `META_ADS_ACCESS_TOKEN`
+2. OS credential store for the token
+
+For non-secret config:
+
 1. CLI flags (`--api-version v24.0`)
 2. Shell environment variables
-3. `.env` file values
-4. `agent-ads.config.json` file values
+3. `agent-ads.config.json` file values
 
 ### Config file
 

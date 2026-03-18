@@ -21,15 +21,19 @@ Load only the reference file you need. Do not preload all of them.
 
 ## Quick Reference
 
-### Auth (env vars only — never from flags or config files)
+### Auth (secure storage or shell env — never from flags or config files)
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `META_ADS_ACCESS_TOKEN` | Yes | Bearer token for all API calls |
+| `META_ADS_ACCESS_TOKEN` | No | Shell override / CI fallback bearer token |
+
+Persistent local auth is stored with `agent-ads meta auth set`.
 
 ### Config precedence
 
-CLI flags > shell env > `.env` file > `agent-ads.config.json`
+Token precedence: shell env > OS credential store
+
+Non-secret precedence: CLI flags > shell env > `agent-ads.config.json`
 
 ### Output defaults
 

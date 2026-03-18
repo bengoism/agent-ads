@@ -13,7 +13,10 @@ npm install -g agent-ads
 ## Quick Start
 
 ```bash
-# Set up your Meta access token
+# Store your Meta access token once
+agent-ads meta auth set
+
+# Or use a shell override for CI / one-off runs
 export META_ADS_ACCESS_TOKEN=EAABs...
 
 # Verify your setup
@@ -44,7 +47,7 @@ agent-ads meta insights query \
 - CSV and JSONL output formats
 - Cursor-based auto-pagination (`--all`, `--max-items`)
 - Async report support (`--async --wait`)
-- Config file + `.env` + CLI flag layering
+- OS credential store for persistent auth, plus shell env override for CI
 
 ## Full Documentation
 

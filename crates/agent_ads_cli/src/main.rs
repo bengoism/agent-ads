@@ -1,20 +1,24 @@
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
 use agent_ads_core::client::GraphResponse;
 use agent_ads_core::config::{
-    inspect, load_env, ConfigOverrides, ConfigSnapshot, EnvFileSource, EnvFileState, ResolvedConfig,
+    inspect, inspect_access_token, AccessTokenSource, AccessTokenStatus, ConfigOverrides,
+    ConfigSnapshot, ResolvedConfig,
 };
 use agent_ads_core::endpoints::{accounts, changes, creative, objects, reports, tracking};
 use agent_ads_core::error::{GraphApiError, MetaAdsError};
 use agent_ads_core::output::{
     render_output, OutputEnvelope, OutputFormat, OutputMeta, RenderOptions,
 };
-use agent_ads_core::GraphClient;
+use agent_ads_core::{
+    GraphClient, OsKeyringStore, SecretStore, META_ACCESS_TOKEN_ACCOUNT, META_ACCESS_TOKEN_SERVICE,
+};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use rpassword::prompt_password;
 use serde_json::{json, Value};
 use tokio::time::{sleep, Instant};
 use tracing_subscriber::EnvFilter;
@@ -32,12 +36,6 @@ struct Cli {
         help = "Config file path [default: agent-ads.config.json]"
     )]
     config: Option<PathBuf>,
-    #[arg(
-        long = "env-file",
-        global = true,
-        help = "Env file for secrets [default: ./.env]"
-    )]
-    env_file: Option<PathBuf>,
     #[arg(long, global = true, help = "Override API base URL")]
     api_base_url: Option<String>,
     #[arg(long, global = true, help = "Override API version (e.g. v25.0)")]
@@ -179,6 +177,11 @@ enum MetaCommand {
         #[command(subcommand)]
         command: PixelHealthCommand,
     },
+    #[command(about = "Manage stored auth token")]
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommand,
+    },
     #[command(about = "Verify auth, config, and API connectivity")]
     Doctor(DoctorArgs),
     #[command(about = "Inspect and validate configuration")]
@@ -256,6 +259,16 @@ enum TrackingListCommand {
 enum DatasetsCommand {
     #[command(about = "Get dataset quality metrics", visible_alias = "cat")]
     Get(DatasetGetArgs),
+}
+
+#[derive(Subcommand, Debug)]
+enum AuthCommand {
+    #[command(about = "Store the Meta token in the OS credential store")]
+    Set(AuthSetArgs),
+    #[command(about = "Show auth source and secure storage status")]
+    Status,
+    #[command(about = "Delete the stored Meta token")]
+    Delete,
 }
 
 #[derive(Subcommand, Debug)]
@@ -556,6 +569,12 @@ struct DoctorArgs {
     api: bool,
 }
 
+#[derive(Args, Debug, Clone)]
+struct AuthSetArgs {
+    #[arg(long, help = "Read the token from stdin instead of prompting")]
+    stdin: bool,
+}
+
 #[derive(Debug, Clone)]
 struct CommandResult {
     envelope: OutputEnvelope,
@@ -588,10 +607,7 @@ async fn main() -> ExitCode {
         include_meta: cli.include_meta,
         quiet: cli.quiet,
     };
-    let env_file_state = match load_env(cli.env_file.as_deref()) {
-        Ok(state) => state,
-        Err(error) => return exit_with_error(&error, &output_options),
-    };
+    let secret_store = OsKeyringStore;
 
     init_tracing(cli.verbose, cli.quiet);
 
@@ -600,21 +616,22 @@ async fn main() -> ExitCode {
         Command::Google => Ok(handle_placeholder_provider("google")),
         Command::Tiktok => Ok(handle_placeholder_provider("tiktok")),
         Command::Meta { command } => match command {
+            MetaCommand::Auth { command } => handle_auth(command, &secret_store),
             MetaCommand::Config { command } => {
-                let snapshot = inspect(cli.config.as_deref(), &env_file_state, &overrides);
+                let snapshot = inspect(cli.config.as_deref(), &secret_store, &overrides);
                 match snapshot {
                     Ok(snapshot) => handle_config(command, snapshot),
                     Err(error) => Err(error),
                 }
             }
             MetaCommand::Doctor(args) => {
-                let snapshot = inspect(cli.config.as_deref(), &env_file_state, &overrides);
+                let snapshot = inspect(cli.config.as_deref(), &secret_store, &overrides);
                 match snapshot {
                     Ok(snapshot) => {
                         handle_doctor(
                             args,
                             cli.config.as_deref(),
-                            &env_file_state,
+                            &secret_store,
                             &overrides,
                             snapshot,
                         )
@@ -624,14 +641,11 @@ async fn main() -> ExitCode {
                 }
             }
             command => {
-                let config = match ResolvedConfig::load(
-                    cli.config.as_deref(),
-                    &env_file_state,
-                    &overrides,
-                ) {
-                    Ok(config) => config,
-                    Err(error) => return exit_with_error(&error, &output_options),
-                };
+                let config =
+                    match ResolvedConfig::load(cli.config.as_deref(), &secret_store, &overrides) {
+                        Ok(config) => config,
+                        Err(error) => return exit_with_error(&error, &output_options),
+                    };
                 let client = match GraphClient::from_config(&config) {
                     Ok(client) => client,
                     Err(error) => return exit_with_error(&error, &output_options),
@@ -690,6 +704,52 @@ fn handle_placeholder_provider(provider: &str) -> CommandResult {
     )
 }
 
+fn handle_auth(
+    command: AuthCommand,
+    secret_store: &dyn SecretStore,
+) -> Result<CommandResult, MetaAdsError> {
+    match command {
+        AuthCommand::Set(args) => {
+            let token = resolve_auth_token_input(&args)?;
+            secret_store
+                .set_secret(META_ACCESS_TOKEN_SERVICE, META_ACCESS_TOKEN_ACCOUNT, &token)
+                .map_err(|error| auth_storage_error("store", &error))?;
+
+            Ok(meta_command_result(
+                json!({
+                    "provider": "meta",
+                    "stored": true,
+                    "credential_store_service": META_ACCESS_TOKEN_SERVICE,
+                    "credential_store_account": META_ACCESS_TOKEN_ACCOUNT,
+                }),
+                "/meta/auth/set",
+                0,
+            ))
+        }
+        AuthCommand::Status => Ok(meta_command_result(
+            auth_status_payload(inspect_access_token(secret_store)),
+            "/meta/auth/status",
+            0,
+        )),
+        AuthCommand::Delete => {
+            let deleted = secret_store
+                .delete_secret(META_ACCESS_TOKEN_SERVICE, META_ACCESS_TOKEN_ACCOUNT)
+                .map_err(|error| auth_storage_error("delete", &error))?;
+
+            Ok(meta_command_result(
+                json!({
+                    "provider": "meta",
+                    "deleted": deleted,
+                    "credential_store_service": META_ACCESS_TOKEN_SERVICE,
+                    "credential_store_account": META_ACCESS_TOKEN_ACCOUNT,
+                }),
+                "/meta/auth/delete",
+                0,
+            ))
+        }
+    }
+}
+
 fn handle_config(
     command: ConfigCommand,
     snapshot: ConfigSnapshot,
@@ -718,35 +778,15 @@ fn handle_config(
 async fn handle_doctor(
     args: DoctorArgs,
     config_path: Option<&Path>,
-    env_file_state: &EnvFileState,
+    secret_store: &dyn SecretStore,
     overrides: &ConfigOverrides,
     snapshot: ConfigSnapshot,
 ) -> Result<CommandResult, MetaAdsError> {
     let mut checks = vec![
         json!({
-            "name": "env_file",
-            "ok": true,
-            "detail": match (
-                snapshot.env_file_loaded,
-                snapshot.env_file_exists,
-                snapshot.env_file_source.as_ref(),
-                snapshot.env_file_path.as_ref(),
-            ) {
-                (true, _, Some(source), Some(path)) => format!(
-                    "loaded {} env file from {}",
-                    match source {
-                        EnvFileSource::Auto => "auto-discovered",
-                        EnvFileSource::Explicit => "explicit",
-                    },
-                    path.display()
-                ),
-                (false, false, Some(EnvFileSource::Auto), Some(path)) => format!(
-                    "no optional .env file found at {}",
-                    path.display()
-                ),
-                (_, _, _, Some(path)) => format!("env file resolved to {}", path.display()),
-                _ => "env file discovery not configured".to_string(),
-            }
+            "name": "credential_store",
+            "ok": snapshot.credential_store_available,
+            "detail": credential_store_detail(&snapshot),
         }),
         json!({
             "name": "config_file",
@@ -760,18 +800,14 @@ async fn handle_doctor(
         json!({
             "name": "access_token",
             "ok": snapshot.access_token_present,
-            "detail": if snapshot.access_token_present {
-                "META_ADS_ACCESS_TOKEN is set"
-            } else {
-                "META_ADS_ACCESS_TOKEN is missing"
-            }
+            "detail": access_token_detail(&snapshot),
         }),
     ];
 
     let mut ok = snapshot.access_token_present;
     if args.api {
         if snapshot.access_token_present {
-            match ResolvedConfig::load(config_path, env_file_state, overrides)
+            match ResolvedConfig::load(config_path, secret_store, overrides)
                 .and_then(|config| GraphClient::from_config(&config).map(|client| (config, client)))
             {
                 Ok((_, client)) => {
@@ -1131,7 +1167,7 @@ async fn dispatch_meta_with_client(
                 ))
             }
         },
-        MetaCommand::Doctor(_) | MetaCommand::Config { .. } => {
+        MetaCommand::Doctor(_) | MetaCommand::Config { .. } | MetaCommand::Auth { .. } => {
             unreachable!("handled before auth setup")
         }
     }
@@ -1657,6 +1693,90 @@ fn read_input(path: &Path) -> Result<String, MetaAdsError> {
     }
 }
 
+fn resolve_auth_token_input(args: &AuthSetArgs) -> Result<String, MetaAdsError> {
+    let token = if args.stdin {
+        read_input(Path::new("-"))?
+    } else {
+        prompt_for_auth_token()?
+    };
+
+    let token = token.trim().to_string();
+    if token.is_empty() {
+        return Err(MetaAdsError::InvalidArgument(
+            "token input was empty".to_string(),
+        ));
+    }
+
+    Ok(token)
+}
+
+fn prompt_for_auth_token() -> Result<String, MetaAdsError> {
+    if !io::stdin().is_terminal() {
+        return Err(MetaAdsError::InvalidArgument(
+            "stdin is not a terminal; pass --stdin to read the token from stdin".to_string(),
+        ));
+    }
+
+    prompt_password("Meta access token: ").map_err(MetaAdsError::Io)
+}
+
+fn auth_storage_error(action: &str, error: &impl std::fmt::Display) -> MetaAdsError {
+    MetaAdsError::Config(format!(
+        "failed to {action} the Meta token in the OS credential store: {error}{}",
+        linux_secure_storage_hint()
+    ))
+}
+
+fn linux_secure_storage_hint() -> &'static str {
+    if cfg!(target_os = "linux") {
+        " On Linux, secure storage requires a running Secret Service provider such as GNOME Keyring or KWallet."
+    } else {
+        ""
+    }
+}
+
+fn credential_store_detail(snapshot: &ConfigSnapshot) -> String {
+    match snapshot.credential_store_error.as_deref() {
+        Some(error) => format!("OS credential store unavailable: {error}"),
+        None if snapshot.keychain_token_present => {
+            "stored Meta token found in OS credential store".to_string()
+        }
+        None if snapshot.credential_store_available => {
+            "OS credential store is available; no stored Meta token found".to_string()
+        }
+        None => "OS credential store is unavailable".to_string(),
+    }
+}
+
+fn access_token_detail(snapshot: &ConfigSnapshot) -> String {
+    match snapshot.access_token_source {
+        AccessTokenSource::ShellEnv if snapshot.keychain_token_present => {
+            "META_ADS_ACCESS_TOKEN is set in shell env and overrides the stored token".to_string()
+        }
+        AccessTokenSource::ShellEnv => "META_ADS_ACCESS_TOKEN is set in shell env".to_string(),
+        AccessTokenSource::Keychain => {
+            "using stored Meta token from the OS credential store".to_string()
+        }
+        AccessTokenSource::Missing => match snapshot.credential_store_error.as_deref() {
+            Some(error) => format!("META_ADS_ACCESS_TOKEN is missing; {error}"),
+            None => "META_ADS_ACCESS_TOKEN is missing".to_string(),
+        },
+    }
+}
+
+fn auth_status_payload(status: AccessTokenStatus) -> Value {
+    json!({
+        "provider": "meta",
+        "credential_store_service": META_ACCESS_TOKEN_SERVICE,
+        "credential_store_account": META_ACCESS_TOKEN_ACCOUNT,
+        "access_token_present": status.access_token_present,
+        "access_token_source": status.access_token_source,
+        "credential_store_available": status.credential_store_available,
+        "keychain_token_present": status.keychain_token_present,
+        "credential_store_error": status.credential_store_error,
+    })
+}
+
 fn extract_report_run_id(data: &Value) -> Option<String> {
     data.get("report_run_id")
         .and_then(Value::as_str)
@@ -1764,7 +1884,7 @@ mod tests {
     #[test]
     fn root_help_lists_provider_topics() {
         let help = render_help(&mut Cli::command());
-        assert!(help.contains("--env-file"));
+        assert!(!help.contains("--env-file"));
         assert!(help.contains("providers"));
         assert!(help.contains("meta"));
         assert!(help.contains("google"));
@@ -1777,6 +1897,7 @@ mod tests {
         assert!(help.contains("businesses"));
         assert!(help.contains("insights"));
         assert!(help.contains("report-runs"));
+        assert!(help.contains("auth"));
         assert!(help.contains("config"));
     }
 
@@ -1813,6 +1934,14 @@ mod tests {
         let cli = Cli::try_parse_from(["agent-ads", "meta", "businesses", "ls"]).unwrap();
         let debug = format!("{cli:?}");
         assert!(debug.contains("Businesses"));
+    }
+
+    #[test]
+    fn parses_auth_set_command() {
+        let cli = Cli::try_parse_from(["agent-ads", "meta", "auth", "set", "--stdin"]).unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Auth"));
+        assert!(debug.contains("Set"));
     }
 
     #[test]
