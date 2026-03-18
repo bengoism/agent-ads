@@ -26,7 +26,6 @@ Load only the reference file you need. Do not preload all of them.
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `META_ADS_ACCESS_TOKEN` | Yes | Bearer token for all API calls |
-| `META_ADS_APP_SECRET` | No | Enables `appsecret_proof` |
 
 ### Config precedence
 

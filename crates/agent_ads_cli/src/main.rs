@@ -766,15 +766,6 @@ async fn handle_doctor(
                 "META_ADS_ACCESS_TOKEN is missing"
             }
         }),
-        json!({
-            "name": "app_secret",
-            "ok": snapshot.app_secret_present,
-            "detail": if snapshot.app_secret_present {
-                "META_ADS_APP_SECRET is set"
-            } else {
-                "META_ADS_APP_SECRET is not set"
-            }
-        }),
     ];
 
     let mut ok = snapshot.access_token_present;

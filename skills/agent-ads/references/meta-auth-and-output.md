@@ -9,7 +9,6 @@ Two environment variables control Meta API access:
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `META_ADS_ACCESS_TOKEN` | Yes | Bearer token for all Meta API calls |
-| `META_ADS_APP_SECRET` | No | Enables HMAC `appsecret_proof` for server-to-server security |
 
 Secrets are **never** read from CLI flags or config files — only from environment variables.
 
@@ -19,14 +18,12 @@ Option 1 — shell environment:
 
 ```bash
 export META_ADS_ACCESS_TOKEN=EAABs...
-export META_ADS_APP_SECRET=abc123
 ```
 
 Option 2 — `.env` file in the current directory:
 
 ```dotenv
 META_ADS_ACCESS_TOKEN=EAABs...
-META_ADS_APP_SECRET=abc123
 ```
 
 `agent-ads` auto-loads `./.env` if it exists. Use `--env-file <path>` to load a different file. Existing shell variables always win over `.env` values (the CLI never overwrites what's already set in your shell).
@@ -50,7 +47,6 @@ Example `doctor` output:
     { "name": "env_file", "ok": true, "detail": "loaded auto-discovered env file from /work/.env" },
     { "name": "config_file", "ok": true, "detail": "using /work/agent-ads.config.json" },
     { "name": "access_token", "ok": true, "detail": "META_ADS_ACCESS_TOKEN is set" },
-    { "name": "app_secret", "ok": true, "detail": "META_ADS_APP_SECRET is set" },
     { "name": "api_ping", "ok": true, "detail": "token accepted by Meta API; sampled 1 business record(s)" }
   ]
 }

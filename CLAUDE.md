@@ -32,7 +32,7 @@ npm run docs:generate          # regenerate docs/command-topics.md from CLI help
 
 - **Provider-explicit commands**: always `agent-ads meta ...`, never `agent-ads campaigns ...`
 - **No colon syntax**: `agent-ads meta insights query`, not `agent-ads meta:insights:query`
-- **Secrets from env only**: `META_ADS_ACCESS_TOKEN` and `META_ADS_APP_SECRET` come from environment variables or `.env`, never from flags or config files
+- **Secrets from env only**: `META_ADS_ACCESS_TOKEN` comes from environment variables or `.env`, never from flags or config files
 - **Config precedence**: CLI flags > shell env > `.env` > `agent-ads.config.json`
 - **Data-only output**: stdout is raw JSON by default (no envelope). Use `--envelope` for metadata/paging wrapper
 - **Errors on stderr**: always JSON format

@@ -7,7 +7,6 @@ use serde_json::{Map, Value};
 use tokio::time::sleep;
 use tracing::debug;
 
-use crate::auth::appsecret_proof;
 use crate::config::ResolvedConfig;
 use crate::error::{
     is_retryable_status, GraphApiError, GraphApiErrorEnvelope, MetaAdsError, Result,
@@ -59,7 +58,6 @@ pub struct GraphClient {
     api_base_url: String,
     api_version: String,
     access_token: String,
-    app_secret: Option<String>,
     max_retries: usize,
 }
 
@@ -74,7 +72,6 @@ impl GraphClient {
             api_base_url: config.api_base_url.trim_end_matches('/').to_string(),
             api_version: config.api_version.clone(),
             access_token: config.access_token.clone(),
-            app_secret: config.app_secret.clone(),
             max_retries: 4,
         })
     }
@@ -202,12 +199,6 @@ impl GraphClient {
         query.insert("access_token".to_string(), self.access_token.clone());
         if !fields.is_empty() {
             query.insert("fields".to_string(), fields.join(","));
-        }
-        if let Some(app_secret) = &self.app_secret {
-            query.insert(
-                "appsecret_proof".to_string(),
-                appsecret_proof(&self.access_token, app_secret),
-            );
         }
 
         let mut last_error = None;
@@ -349,7 +340,6 @@ mod tests {
     fn test_config(base_url: &str) -> ResolvedConfig {
         ResolvedConfig {
             access_token: "token".to_string(),
-            app_secret: Some("secret".to_string()),
             api_base_url: base_url.to_string(),
             api_version: "v25.0".to_string(),
             timeout_seconds: 10,

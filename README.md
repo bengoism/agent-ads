@@ -40,7 +40,6 @@ Meta requires an access token. Set it as an environment variable or in a `.env` 
 
 ```bash
 export META_ADS_ACCESS_TOKEN=EAABs...
-export META_ADS_APP_SECRET=abc123   # optional, enables appsecret_proof
 ```
 
 Or create a `.env` file in the current directory with the same variables.
@@ -57,8 +56,7 @@ agent-ads meta doctor
   "checks": [
     { "name": "env_file", "ok": true, "detail": "loaded auto-discovered env file from /work/.env" },
     { "name": "config_file", "ok": true, "detail": "using /work/agent-ads.config.json" },
-    { "name": "access_token", "ok": true, "detail": "META_ADS_ACCESS_TOKEN is set" },
-    { "name": "app_secret", "ok": true, "detail": "META_ADS_APP_SECRET is set" }
+    { "name": "access_token", "ok": true, "detail": "META_ADS_ACCESS_TOKEN is set" }
   ]
 }
 ```
@@ -255,7 +253,6 @@ Setting `default_business_id` and `default_account_id` lets you omit `--business
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `META_ADS_ACCESS_TOKEN` | Yes | Meta API access token |
-| `META_ADS_APP_SECRET` | No | Enables HMAC `appsecret_proof` for server-to-server calls |
 
 Secrets are never read from config files or CLI flags — only from environment variables.
 

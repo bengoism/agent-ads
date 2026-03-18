@@ -49,7 +49,6 @@ pub struct ConfigOverrides {
 #[derive(Debug, Clone)]
 pub struct ResolvedConfig {
     pub access_token: String,
-    pub app_secret: Option<String>,
     pub api_base_url: String,
     pub api_version: String,
     pub timeout_seconds: u64,
@@ -87,7 +86,6 @@ pub struct ConfigSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub env_file_source: Option<EnvFileSource>,
     pub access_token_present: bool,
-    pub app_secret_present: bool,
     pub api_base_url: String,
     pub api_version: String,
     pub timeout_seconds: u64,
@@ -112,11 +110,6 @@ impl ResolvedConfig {
 
         Ok(Self {
             access_token,
-            app_secret: if snapshot.app_secret_present {
-                env::var("META_ADS_APP_SECRET").ok()
-            } else {
-                None
-            },
             api_base_url: snapshot.api_base_url,
             api_version: snapshot.api_version,
             timeout_seconds: snapshot.timeout_seconds,
@@ -192,7 +185,6 @@ pub fn inspect(
         env_file_loaded: env_file_state.env_file_loaded,
         env_file_source: env_file_state.env_file_source.clone(),
         access_token_present: env::var("META_ADS_ACCESS_TOKEN").is_ok(),
-        app_secret_present: env::var("META_ADS_APP_SECRET").is_ok(),
         api_base_url,
         api_version,
         timeout_seconds,
@@ -293,7 +285,6 @@ mod tests {
     fn clear_meta_env() {
         for key in [
             "META_ADS_ACCESS_TOKEN",
-            "META_ADS_APP_SECRET",
             "META_ADS_API_BASE_URL",
             "META_ADS_API_VERSION",
             "META_ADS_TIMEOUT_SECONDS",
