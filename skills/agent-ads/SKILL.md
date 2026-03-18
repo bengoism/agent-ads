@@ -12,6 +12,53 @@ description: >
 
 This file is the only public skill entrypoint. It routes you to provider-specific reference docs.
 
+## What You Can Ask
+
+Plain-English prompts that work. The agent translates these into the right CLI commands.
+
+**Performance & reporting**
+- "Show me my Meta ad spend by campaign for the last 7 days"
+- "What's my TikTok campaign performance this month?"
+- "Pull a daily breakdown of impressions and clicks across all campaigns"
+- "Export last week's Meta performance report to CSV"
+- "Run an async report for all my TikTok ads since January"
+
+**Accounts & campaigns**
+- "What businesses do I have access to in Meta?"
+- "List all my TikTok advertisers"
+- "Show me the campaigns in my Meta ad account"
+- "Which ad sets are running right now?"
+
+**Creative & tracking**
+- "Show my TikTok video creatives"
+- "Check if my Meta pixel is working"
+- "Find broken pixels across my Meta accounts"
+- "What audiences do I have in TikTok?"
+
+**Setup & troubleshooting**
+- "Help me set up my Meta auth token"
+- "Is my TikTok token still valid?"
+- "Run a doctor check on my account"
+- "My token expired — how do I refresh it?"
+
+## Glossary
+
+Translating marketer language to CLI concepts:
+
+| You say | Platform | In the CLI |
+|---------|----------|------------|
+| business manager | Meta | `agent-ads meta businesses list` |
+| ad account | Meta | `--account act_123...` flag |
+| advertiser / ad account | TikTok | `--advertiser-id 123...` flag |
+| campaign performance / report | both | `insights query` command |
+| pixel / tag | Meta | `pixels list`, `pixel-health get` |
+| pixel | TikTok | `pixels list` |
+| audience / custom audience | TikTok | `audiences list` |
+| creative / ad content | Meta | `creatives get`, `creatives preview` |
+| creative / video / image | TikTok | `creatives videos`, `creatives images` |
+| conversion tracking | Meta | `custom-conversions list`, `datasets get` |
+| token / access token | both | stored via `auth set` or shell env var |
+
 ## Command Syntax Rules
 
 Every command starts with `agent-ads <provider>`. This is intentional — each ad platform has different APIs, auth, object models, and semantics, so the CLI keeps them separate rather than papering over differences.
@@ -57,12 +104,23 @@ These flags work with every command and every provider:
 
 ## Pagination Flags
 
-All list commands support:
+Pagination differs by provider. Both support `--all` and `--max-items`.
+
+### Meta (cursor-based)
 
 | Flag | What it does |
 |------|-------------|
 | `--page-size <n>` | Items per API request |
-| `--cursor <token>` | Resume from cursor |
+| `--cursor <token>` | Resume from a specific cursor |
+| `--all` | Auto-follow all pages |
+| `--max-items <n>` | Stop after N items |
+
+### TikTok (page-number)
+
+| Flag | What it does |
+|------|-------------|
+| `--page-size <n>` | Items per page |
+| `--page <n>` | Page number (1-indexed) |
 | `--all` | Auto-follow all pages |
 | `--max-items <n>` | Stop after N items |
 
@@ -96,9 +154,45 @@ The user's `TIKTOK_ADS_ACCESS_TOKEN` is obtained through TikTok's OAuth flow and
 - Shell override / CI fallback: `META_ADS_ACCESS_TOKEN=...` or `TIKTOK_ADS_ACCESS_TOKEN=...`
 - Linux secure storage requires a running Secret Service provider such as GNOME Keyring or KWallet
 
-## Worked Example
+## First-Time Setup
 
-A typical multi-step session discovering accounts and pulling a report:
+If the user has never used `agent-ads` before, walk them through these steps.
+
+### Meta — first run
+
+```bash
+# 1. Store your token (get one from https://developers.facebook.com/tools/explorer/)
+agent-ads meta auth set
+
+# 2. Verify everything works (--api pings the Meta API)
+agent-ads meta doctor --api
+
+# 3. See what you have access to
+agent-ads meta businesses list
+```
+
+If step 2 fails, check the Token Permissions section above — they likely need `ads_read` and optionally `business_management` scopes.
+
+### TikTok — first run
+
+```bash
+# 1. Store your token
+agent-ads tiktok auth set
+
+# 2. Verify everything works
+agent-ads tiktok doctor --api
+
+# 3. List your advertisers (requires app credentials)
+agent-ads tiktok advertisers list \
+  --app-id $TIKTOK_ADS_APP_ID \
+  --app-secret $TIKTOK_ADS_APP_SECRET
+```
+
+TikTok tokens expire every 24 hours. If the doctor check fails with an auth error, refresh with `agent-ads tiktok auth refresh --app-id ... --app-secret ...`.
+
+## Worked Examples
+
+### Meta — discover accounts and pull a report
 
 ```bash
 # 1. Check setup
@@ -131,6 +225,42 @@ agent-ads meta insights export \
   --format csv --output large-report.csv
 ```
 
+### TikTok — discover advertisers and pull a report
+
+```bash
+# 1. Check setup
+agent-ads tiktok doctor --api
+
+# 2. List your advertisers
+agent-ads tiktok advertisers list \
+  --app-id $TIKTOK_ADS_APP_ID \
+  --app-secret $TIKTOK_ADS_APP_SECRET
+
+# 3. List campaigns for an advertiser
+agent-ads tiktok campaigns list --advertiser-id 1234567890
+
+# 4. Pull campaign performance for a date range
+agent-ads tiktok insights query \
+  --advertiser-id 1234567890 \
+  --report-type BASIC \
+  --data-level AUCTION_CAMPAIGN \
+  --dimensions campaign_id \
+  --metrics spend,impressions,clicks,ctr \
+  --start-date 2026-03-01 \
+  --end-date 2026-03-16
+
+# 5. Export to CSV
+agent-ads tiktok insights query \
+  --advertiser-id 1234567890 \
+  --report-type BASIC \
+  --data-level AUCTION_CAMPAIGN \
+  --dimensions campaign_id \
+  --metrics spend,impressions,clicks \
+  --start-date 2026-03-01 \
+  --end-date 2026-03-16 \
+  --format csv --output tiktok-report.csv
+```
+
 ## Meta Routing
 
 When the provider is `meta`, read [references/meta.md](references/meta.md) first. That file is a routing guide — it tells you which specific reference file to load based on the task:
@@ -154,6 +284,17 @@ When the provider is `tiktok`, read [references/tiktok.md](references/tiktok.md)
 - Creative assets, pixels, audiences → `tiktok-creative-and-tracking.md`
 
 Load only the reference file you need. Do not load all of them at once.
+
+## Common Issues
+
+| Problem | What's happening | Fix |
+|---------|-----------------|-----|
+| "My token expired" | Meta tokens can be short-lived; TikTok tokens expire every 24 hours | Meta: regenerate at [Graph API Explorer](https://developers.facebook.com/tools/explorer/) then `meta auth set`. TikTok: `tiktok auth refresh --app-id ... --app-secret ...` |
+| "I don't know my account ID" | You need to discover it first | Meta: `meta businesses list` → `meta ad-accounts list --business-id ...`. TikTok: `tiktok advertisers list --app-id ... --app-secret ...` |
+| "Permission denied" | Token is missing required scopes | Meta: regenerate token with `ads_read` (and `business_management` for discovery). TikTok: check app permissions in TikTok developer portal |
+| "Command not found" | CLI not installed or not on PATH | Run `agent-ads --version`. If missing: `npm install -g agent-ads` |
+| "doctor says credential store unavailable" | No OS keychain on this machine (common on Linux servers) | Use shell env vars instead: `export META_ADS_ACCESS_TOKEN=...` or `export TIKTOK_ADS_ACCESS_TOKEN=...` |
+| "TikTok says 'advertiser-id is required'" | Most TikTok commands need an advertiser ID | Add `--advertiser-id <id>`, or set `default_advertiser_id` in `agent-ads.config.json` under `providers.tiktok` |
 
 ## Stop Conditions
 
