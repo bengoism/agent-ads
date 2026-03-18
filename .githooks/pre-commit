@@ -1,0 +1,20 @@
+#!/bin/sh
+# Auto-format Rust code before committing.
+# Installed by `npm install` via the prepare script.
+
+# Only run if cargo/rustfmt is available
+if ! command -v cargo >/dev/null 2>&1; then
+  exit 0
+fi
+
+# Check if any Rust files are staged
+if git diff --cached --name-only | grep -q '\.rs$'; then
+  cargo fmt --all -- --check >/dev/null 2>&1
+  if [ $? -ne 0 ]; then
+    echo "Running cargo fmt..."
+    cargo fmt --all
+    # Re-stage the formatted files
+    git diff --cached --name-only | grep '\.rs$' | xargs git add
+    echo "Rust files formatted and re-staged."
+  fi
+fi

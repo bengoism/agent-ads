@@ -4,17 +4,17 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
-use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
-use meta_ads_core::client::GraphResponse;
-use meta_ads_core::config::{
+use agent_ads_core::client::GraphResponse;
+use agent_ads_core::config::{
     inspect, load_env, ConfigOverrides, ConfigSnapshot, EnvFileSource, EnvFileState, ResolvedConfig,
 };
-use meta_ads_core::endpoints::{accounts, changes, creative, objects, reports, tracking};
-use meta_ads_core::error::{GraphApiError, MetaAdsError};
-use meta_ads_core::output::{
+use agent_ads_core::endpoints::{accounts, changes, creative, objects, reports, tracking};
+use agent_ads_core::error::{GraphApiError, MetaAdsError};
+use agent_ads_core::output::{
     render_output, OutputEnvelope, OutputFormat, OutputMeta, RenderOptions,
 };
-use meta_ads_core::GraphClient;
+use agent_ads_core::GraphClient;
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use serde_json::{json, Value};
 use tokio::time::{sleep, Instant};
 use tracing_subscriber::EnvFilter;
@@ -26,29 +26,46 @@ use tracing_subscriber::EnvFilter;
     about = "Unix-first multi-provider ads CLI"
 )]
 struct Cli {
-    #[arg(long)]
+    #[arg(
+        long,
+        global = true,
+        help = "Config file path [default: agent-ads.config.json]"
+    )]
     config: Option<PathBuf>,
-    #[arg(long = "env-file")]
+    #[arg(
+        long = "env-file",
+        global = true,
+        help = "Env file for secrets [default: ./.env]"
+    )]
     env_file: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, global = true, help = "Override API base URL")]
     api_base_url: Option<String>,
-    #[arg(long)]
+    #[arg(long, global = true, help = "Override API version (e.g. v25.0)")]
     api_version: Option<String>,
-    #[arg(long)]
+    #[arg(long, global = true, help = "HTTP request timeout in seconds")]
     timeout_seconds: Option<u64>,
-    #[arg(long)]
+    #[arg(long, global = true, help = "Output format")]
     format: Option<FormatArg>,
-    #[arg(long)]
+    #[arg(long, global = true, help = "Write output to file (- for stdout)")]
     output: Option<PathBuf>,
-    #[arg(long)]
+    #[arg(long, global = true, help = "Pretty-print JSON output")]
     pretty: bool,
-    #[arg(long)]
+    #[arg(
+        long,
+        global = true,
+        help = "Include response metadata, paging, and warnings"
+    )]
     envelope: bool,
-    #[arg(long)]
+    #[arg(long, global = true, help = "Add metadata columns to CSV output")]
     include_meta: bool,
-    #[arg(short, long)]
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Suppress warnings and non-data output"
+    )]
     quiet: bool,
-    #[arg(short, long, action = ArgAction::Count, conflicts_with = "quiet")]
+    #[arg(short, long, global = true, action = ArgAction::Count, conflicts_with = "quiet", help = "Increase log verbosity (-v info, -vv debug)")]
     verbose: u8,
     #[command(subcommand)]
     command: Command,
@@ -73,81 +90,98 @@ impl From<FormatArg> for OutputFormat {
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    #[command(about = "Inspect available and planned ad providers")]
     Providers {
         #[command(subcommand)]
         command: ProvidersCommand,
     },
+    #[command(about = "Meta (Facebook/Instagram) Marketing API commands")]
     Meta {
         #[command(subcommand)]
         command: MetaCommand,
     },
-    #[command(about = "Google Ads provider namespace. Commands are not implemented yet.")]
+    #[command(about = "Google Ads provider namespace (not implemented yet)")]
     Google,
-    #[command(about = "TikTok Ads provider namespace. Commands are not implemented yet.")]
+    #[command(about = "TikTok Ads provider namespace (not implemented yet)")]
     Tiktok,
 }
 
 #[derive(Subcommand, Debug)]
 enum ProvidersCommand {
-    #[command(visible_alias = "ls")]
+    #[command(about = "List available and planned providers", visible_alias = "ls")]
     List,
 }
 
 #[derive(Subcommand, Debug)]
 enum MetaCommand {
+    #[command(about = "List businesses accessible to your token")]
     Businesses {
         #[command(subcommand)]
         command: BusinessesCommand,
     },
+    #[command(about = "List ad accounts under a business")]
     AdAccounts {
         #[command(subcommand)]
         command: AdAccountsCommand,
     },
+    #[command(about = "List campaigns in an ad account")]
     Campaigns {
         #[command(subcommand)]
         command: ObjectListCommand,
     },
+    #[command(about = "List ad sets in an ad account")]
     Adsets {
         #[command(subcommand)]
         command: ObjectListCommand,
     },
+    #[command(about = "List ads in an ad account")]
     Ads {
         #[command(subcommand)]
         command: ObjectListCommand,
     },
+    #[command(about = "Query performance insights (sync and async)")]
     Insights {
         #[command(subcommand)]
         command: InsightsCommand,
     },
+    #[command(about = "Manage async report run lifecycle")]
     ReportRuns {
         #[command(subcommand)]
         command: ReportRunsCommand,
     },
+    #[command(about = "Inspect ad creatives and previews")]
     Creatives {
         #[command(subcommand)]
         command: CreativesCommand,
     },
+    #[command(about = "List account activity and change history")]
     Activities {
         #[command(subcommand)]
         command: ActivitiesCommand,
     },
+    #[command(about = "List custom conversion rules")]
     CustomConversions {
         #[command(subcommand)]
         command: TrackingListCommand,
     },
+    #[command(about = "List tracking pixels")]
     Pixels {
         #[command(subcommand)]
         command: TrackingListCommand,
     },
+    #[command(about = "Get dataset quality metrics")]
     Datasets {
         #[command(subcommand)]
         command: DatasetsCommand,
     },
+    #[command(about = "Combined pixel health diagnostics")]
     PixelHealth {
         #[command(subcommand)]
         command: PixelHealthCommand,
     },
+    #[command(about = "Verify auth, config, and API connectivity")]
     Doctor(DoctorArgs),
+    #[command(about = "Inspect and validate configuration")]
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
@@ -156,112 +190,136 @@ enum MetaCommand {
 
 #[derive(Subcommand, Debug)]
 enum BusinessesCommand {
-    #[command(visible_alias = "ls")]
+    #[command(
+        about = "List businesses accessible to your token",
+        visible_alias = "ls"
+    )]
     List(BusinessListArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum AdAccountsCommand {
-    #[command(visible_alias = "ls")]
+    #[command(about = "List ad accounts by scope", visible_alias = "ls")]
     List(AdAccountListArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum ObjectListCommand {
-    #[command(visible_alias = "ls")]
+    #[command(about = "List objects in an ad account", visible_alias = "ls")]
     List(AccountListArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum InsightsCommand {
+    #[command(about = "Run a synchronous insights query")]
     Query(InsightsQueryArgs),
+    #[command(about = "Query insights with optional async mode")]
     Export(InsightsExportArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum ReportRunsCommand {
+    #[command(about = "Submit an async report run")]
     Submit(InsightsRequestArgs),
+    #[command(about = "Check async report run status")]
     Status(ReportRunStatusArgs),
+    #[command(about = "Fetch completed report run results")]
     Results(ReportRunResultsArgs),
+    #[command(about = "Poll until a report run completes")]
     Wait(ReportRunWaitArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum CreativesCommand {
-    #[command(visible_alias = "cat")]
+    #[command(about = "Fetch a creative by ID", visible_alias = "cat")]
     Get(CreativeGetArgs),
+    #[command(about = "Get rendered ad preview")]
     Preview(CreativePreviewArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum ActivitiesCommand {
-    #[command(visible_alias = "ls")]
+    #[command(
+        about = "List account activity and change history",
+        visible_alias = "ls"
+    )]
     List(ActivitiesArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum TrackingListCommand {
-    #[command(visible_alias = "ls")]
+    #[command(about = "List tracking objects in an ad account", visible_alias = "ls")]
     List(AccountListArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum DatasetsCommand {
-    #[command(visible_alias = "cat")]
+    #[command(about = "Get dataset quality metrics", visible_alias = "cat")]
     Get(DatasetGetArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum PixelHealthCommand {
-    #[command(visible_alias = "cat")]
+    #[command(about = "Get combined pixel health diagnostics", visible_alias = "cat")]
     Get(PixelHealthArgs),
 }
 
 #[derive(Subcommand, Debug)]
 enum ConfigCommand {
+    #[command(about = "Show resolved config file path")]
     Path,
+    #[command(about = "Show full resolved configuration")]
     Show,
+    #[command(about = "Validate config file")]
     Validate,
 }
 
 #[derive(Args, Debug, Clone, Default)]
 struct PaginationArgs {
-    #[arg(long = "page-size", alias = "limit")]
+    #[arg(long = "page-size", alias = "limit", help = "Items per API request")]
     page_size: Option<u32>,
-    #[arg(long = "cursor", alias = "after")]
+    #[arg(
+        long = "cursor",
+        alias = "after",
+        help = "Resume from a pagination cursor"
+    )]
     cursor: Option<String>,
-    #[arg(long)]
+    #[arg(long, help = "Auto-paginate through all results")]
     all: bool,
-    #[arg(long = "max-items")]
+    #[arg(long = "max-items", help = "Stop after collecting N total items")]
     max_items: Option<usize>,
 }
 
 #[derive(Args, Debug, Clone, Default)]
 struct FieldInputArgs {
-    #[arg(long, value_delimiter = ',')]
+    #[arg(long, value_delimiter = ',', help = "Comma-separated field names")]
     fields: Vec<String>,
-    #[arg(long)]
+    #[arg(long, help = "Read field names from file (- for stdin)")]
     fields_file: Option<PathBuf>,
 }
 
 #[derive(Args, Debug, Clone, Default)]
 #[group(id = "selector", multiple = false)]
 struct SelectorArgs {
-    #[arg(long)]
+    #[arg(long, help = "Ad account ID (e.g. act_1234567890)")]
     account: Option<String>,
-    #[arg(long = "object", alias = "object-id")]
+    #[arg(
+        long = "object",
+        alias = "object-id",
+        help = "Arbitrary Graph API object ID"
+    )]
     object: Option<String>,
 }
 
 #[derive(Args, Debug, Clone, Default)]
 struct TimeInputArgs {
-    #[arg(long, requires = "until", conflicts_with_all = ["date_preset", "time_range_file"])]
+    #[arg(long, requires = "until", conflicts_with_all = ["date_preset", "time_range_file"], help = "Start date (YYYY-MM-DD)")]
     since: Option<String>,
-    #[arg(long, requires = "since", conflicts_with_all = ["date_preset", "time_range_file"])]
+    #[arg(long, requires = "since", conflicts_with_all = ["date_preset", "time_range_file"], help = "End date (YYYY-MM-DD)")]
     until: Option<String>,
-    #[arg(long, conflicts_with_all = ["since", "until", "time_range_file"])]
+    #[arg(long, conflicts_with_all = ["since", "until", "time_range_file"], help = "Named date preset (e.g. last_7d, last_30d)")]
     date_preset: Option<String>,
-    #[arg(long, conflicts_with_all = ["since", "until", "date_preset"])]
+    #[arg(long, conflicts_with_all = ["since", "until", "date_preset"], help = "JSON file with since/until (- for stdin)")]
     time_range_file: Option<PathBuf>,
 }
 
@@ -316,28 +374,45 @@ struct AccountListArgs {
 struct InsightsRequestArgs {
     #[command(flatten)]
     selector: SelectorArgs,
-    #[arg(long)]
+    #[arg(long, help = "Aggregation level: account, campaign, adset, ad")]
     level: Option<String>,
-    #[arg(long)]
+    #[arg(long, help = "Time bucketing: 1 (daily), 7, 14, monthly, all_days")]
     time_increment: Option<String>,
     #[command(flatten)]
     field_input: FieldInputArgs,
     #[command(flatten)]
     time_input: TimeInputArgs,
-    #[arg(long, value_delimiter = ',')]
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help = "Dimension breakdowns (e.g. age,gender,country)"
+    )]
     breakdowns: Vec<String>,
-    #[arg(long = "action-breakdowns", value_delimiter = ',')]
+    #[arg(
+        long = "action-breakdowns",
+        value_delimiter = ',',
+        help = "Action breakdowns (requires actions in --fields)"
+    )]
     action_breakdowns: Vec<String>,
-    #[arg(long, value_delimiter = ',')]
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help = "Sort order (e.g. spend_descending)"
+    )]
     sort: Vec<String>,
-    #[arg(long = "filter", alias = "filtering")]
+    #[arg(
+        long = "filter",
+        alias = "filtering",
+        help = "Inline filter JSON (repeatable)"
+    )]
     filters: Vec<String>,
-    #[arg(long)]
+    #[arg(long, help = "JSON file with filter array (- for stdin)")]
     filter_file: Option<PathBuf>,
     #[arg(
         long = "attribution-windows",
         alias = "action-attribution-windows",
-        value_delimiter = ','
+        value_delimiter = ',',
+        help = "Attribution windows (e.g. 1d_click,7d_click,1d_view)"
     )]
     attribution_windows: Vec<String>,
 }
@@ -356,13 +431,21 @@ struct InsightsExportArgs {
     request: InsightsRequestArgs,
     #[command(flatten)]
     pagination: PaginationArgs,
-    #[arg(long = "async")]
+    #[arg(long = "async", help = "Use async report run instead of inline query")]
     async_mode: bool,
-    #[arg(long, requires = "async_mode")]
+    #[arg(
+        long,
+        requires = "async_mode",
+        help = "Poll until complete, then return results"
+    )]
     wait: bool,
-    #[arg(long, default_value_t = 5)]
+    #[arg(long, default_value_t = 5, help = "Seconds between status polls")]
     poll_interval_seconds: u64,
-    #[arg(long, default_value_t = 3600)]
+    #[arg(
+        long,
+        default_value_t = 3600,
+        help = "Max seconds to wait before timeout"
+    )]
     wait_timeout_seconds: u64,
 }
 
@@ -405,7 +488,7 @@ struct CreativeGetArgs {
 }
 
 #[derive(Args, Debug, Clone)]
-#[group(id = "preview_target", required = true, multiple = false)]
+#[command(group(clap::ArgGroup::new("preview_target").required(true).multiple(false).args(["creative", "ad"])))]
 struct CreativePreviewArgs {
     #[arg(long = "creative", alias = "creative-id")]
     creative: Option<String>,
@@ -469,7 +552,7 @@ struct PixelHealthArgs {
 
 #[derive(Args, Debug, Clone)]
 struct DoctorArgs {
-    #[arg(long)]
+    #[arg(long, help = "Also ping the Meta API to verify the token")]
     api: bool,
 }
 
@@ -1313,7 +1396,7 @@ fn meta_command_result(data: Value, endpoint: &str, exit_code: u8) -> CommandRes
         data,
         endpoint,
         exit_code,
-        Some(meta_ads_core::DEFAULT_API_VERSION),
+        Some(agent_ads_core::DEFAULT_API_VERSION),
     )
 }
 
@@ -1601,7 +1684,7 @@ fn init_tracing(verbose: u8, quiet: bool) {
         }
     };
     let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(format!("{default_level},meta_ads_core=debug")));
+        .unwrap_or_else(|_| EnvFilter::new(format!("{default_level},agent_ads_core=debug")));
     tracing_subscriber::fmt()
         .with_env_filter(filter)
         .without_time()

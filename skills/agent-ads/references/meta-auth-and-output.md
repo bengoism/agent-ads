@@ -1,87 +1,158 @@
 # Meta Auth And Output
 
-Use this file for local setup, auth, config precedence, and output behavior.
+Use this file for local setup, authentication, config resolution, and output behavior.
 
 ## Authentication
 
-- Required env var: `META_ADS_ACCESS_TOKEN`
-- Optional env var: `META_ADS_APP_SECRET`
-- Secrets are not read from flags or config files.
-- `agent-ads` auto-loads `./.env` from the current working directory if it exists.
-- Use `--env-file <path>` to load a different env file explicitly.
-- Existing shell env vars win over values from `.env`.
+Two environment variables control Meta API access:
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `META_ADS_ACCESS_TOKEN` | Yes | Bearer token for all Meta API calls |
+| `META_ADS_APP_SECRET` | No | Enables HMAC `appsecret_proof` for server-to-server security |
+
+Secrets are **never** read from CLI flags or config files — only from environment variables.
+
+### Setting up auth
+
+Option 1 — shell environment:
+
+```bash
+export META_ADS_ACCESS_TOKEN=EAABs...
+export META_ADS_APP_SECRET=abc123
+```
+
+Option 2 — `.env` file in the current directory:
+
+```dotenv
+META_ADS_ACCESS_TOKEN=EAABs...
+META_ADS_APP_SECRET=abc123
+```
+
+`agent-ads` auto-loads `./.env` if it exists. Use `--env-file <path>` to load a different file. Existing shell variables always win over `.env` values (the CLI never overwrites what's already set in your shell).
+
+### Verifying auth
+
+```bash
+# Check config and env without hitting the API
+agent-ads meta doctor
+
+# Also ping the API to confirm the token works
+agent-ads meta doctor --api
+```
+
+Example `doctor` output:
+
+```json
+{
+  "ok": true,
+  "checks": [
+    { "name": "env_file", "ok": true, "detail": "loaded auto-discovered env file from /work/.env" },
+    { "name": "config_file", "ok": true, "detail": "using /work/agent-ads.config.json" },
+    { "name": "access_token", "ok": true, "detail": "META_ADS_ACCESS_TOKEN is set" },
+    { "name": "app_secret", "ok": true, "detail": "META_ADS_APP_SECRET is set" },
+    { "name": "api_ping", "ok": true, "detail": "token accepted by Meta API; sampled 1 business record(s)" }
+  ]
+}
+```
 
 ## Config Resolution
 
-- CLI flags win over shell environment values.
-- Shell environment values win over `.env`.
-- `.env` values win over `agent-ads.config.json`.
-- Default config file name: `agent-ads.config.json`
-- Default env file name: `.env` in the current working directory
+Precedence (highest to lowest):
 
-Supported config keys:
+1. CLI flags (`--api-version v24.0`)
+2. Shell environment variables
+3. `.env` file values
+4. `agent-ads.config.json` file values
 
-- `api_base_url`
-- `api_version`
-- `timeout_seconds`
-- `default_business_id`
-- `default_account_id`
-- `output_format`
+### Config file
 
-Inspect config without hitting Meta:
+Default path: `agent-ads.config.json` in the current directory. Override with `--config <path>`.
+
+Supported keys under `providers.meta`:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `api_base_url` | `https://graph.facebook.com` | Meta Graph API base URL |
+| `api_version` | `v25.0` | API version |
+| `timeout_seconds` | `60` | HTTP request timeout |
+| `default_business_id` | none | Fallback for `--business-id` |
+| `default_account_id` | none | Fallback for `--account` |
+| `output_format` | `json` | Default output format |
+
+### Inspecting config
 
 ```bash
+# Show the resolved config file path
 agent-ads meta config path
+
+# Show the full resolved configuration (all sources merged)
 agent-ads meta config show
+
+# Validate the config file parses correctly
 agent-ads meta config validate
-agent-ads meta doctor
 ```
 
 ## Output
 
-- `--format json` is the default and safest for automation.
-- `--format jsonl` emits one data row per line for array responses.
-- `--format csv` emits row data only by default.
-- `--envelope` restores the response wrapper with `meta`, `paging`, and `warnings`.
-- `--include-meta` adds metadata columns to CSV output.
+### Formats
 
-Default JSON output:
+| Flag | Behavior | Best for |
+|------|----------|----------|
+| `--format json` (default) | JSON array or object | Automation, piping to `jq` |
+| `--format jsonl` | One JSON object per line | Streaming, line-by-line processing |
+| `--format csv` | CSV with header row | Spreadsheets, data import |
+
+### Default output (data-only)
+
+By default, stdout contains only the data — no metadata wrapper:
 
 ```json
 [
-  {
-    "id": "act_123",
-    "name": "Agency Account"
-  }
+  { "id": "act_123", "name": "Agency Account" }
 ]
 ```
 
-Envelope mode:
+### Envelope mode
+
+Add `--envelope` to wrap data with response metadata, paging cursors, and warnings:
 
 ```json
 {
-  "data": [
-    {
-      "id": "act_123",
-      "name": "Agency Account"
-    }
-  ],
+  "data": [{ "id": "act_123", "name": "Agency Account" }],
   "meta": {
     "api_version": "v25.0",
     "endpoint": "/1234567890/ad_accounts",
     "object_id": "1234567890"
   },
-  "paging": {
-    "next": "..."
-  }
+  "paging": { "cursors": { "before": "...", "after": "..." }, "next": "..." }
 }
 ```
 
-Error output is JSON on stderr.
+Use `--envelope` when you need to extract the paging cursor for manual pagination, or when you want to see request metadata and warnings.
+
+### Other output flags
+
+| Flag | What it does |
+|------|-------------|
+| `--pretty` | Pretty-print JSON output |
+| `--include-meta` | Add `api_version`, `endpoint`, `object_id` as columns in CSV output |
+| `--output <path>` | Write to a file instead of stdout (`-` for explicit stdout) |
+| `-q, --quiet` | Suppress warnings on stderr |
+
+### Error output
+
+Errors are always JSON on stderr:
+
+```json
+{ "error": { "kind": "api", "message": "Invalid OAuth 2.0 Access Token", "code": 190 } }
+```
 
 ## Exit Codes
 
-- `0` success
-- `1` transport or internal failure
-- `2` config or argument failure
-- `3` Meta API failure
+| Code | Meaning | Example |
+|------|---------|---------|
+| `0` | Success | Normal response |
+| `1` | Transport or internal failure | Network timeout, serialization error |
+| `2` | Config or argument failure | Missing token, invalid flags |
+| `3` | Meta API failure | Token expired, rate limit, invalid field |

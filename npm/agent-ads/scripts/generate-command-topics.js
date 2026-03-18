@@ -88,7 +88,7 @@ const sections = [
     }
 ];
 function runCli(args) {
-    const result = (0, node_child_process_1.spawnSync)("cargo", ["run", "-q", "-p", "meta_ads_cli", "--", ...args], {
+    const result = (0, node_child_process_1.spawnSync)("cargo", ["run", "-q", "-p", "agent_ads_cli", "--", ...args], {
         cwd: root,
         encoding: "utf8"
     });

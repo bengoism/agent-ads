@@ -61,7 +61,7 @@ jobs:
       - name: Build
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.linker }}
-        run: cargo build --release --locked --target ${{ matrix.rust_target }} -p meta_ads_cli
+        run: cargo build --release --locked --target ${{ matrix.rust_target }} -p agent_ads_cli
       - name: Stage binary
         shell: bash
         run: |

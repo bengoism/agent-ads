@@ -96,7 +96,7 @@ const sections: Section[] = [
 ];
 
 function runCli(args: string[]): string {
-  const result = spawnSync("cargo", ["run", "-q", "-p", "meta_ads_cli", "--", ...args], {
+  const result = spawnSync("cargo", ["run", "-q", "-p", "agent_ads_cli", "--", ...args], {
     cwd: root,
     encoding: "utf8"
   });

@@ -1,0 +1,66 @@
+# CLAUDE.md
+
+Project conventions for agents working in this repo.
+
+## What this is
+
+`agent-ads` is a Rust CLI distributed via npm. It queries ad platform APIs (currently Meta Marketing API, read-only). The architecture is provider-explicit: every command starts with `agent-ads <provider> ...`.
+
+## Repo structure
+
+- `crates/agent_ads_core/` — Rust library: HTTP client, auth, config, output, all endpoint logic
+- `crates/agent_ads_cli/` — Rust binary: clap CLI that produces `agent-ads`
+- `npm/agent-ads/` — npm package: thin JS launcher that spawns the correct native binary
+- `npm/platform/` — per-platform npm packages carrying prebuilt binaries
+- `skills/agent-ads/` — public skill (SKILL.md + reference docs for agents)
+- `docs/command-topics.md` — auto-generated CLI reference (do not edit manually)
+- `dist/` — local build artifacts (gitignored on CI)
+
+## Build commands
+
+```bash
+npm install                    # install JS deps
+npm run build:ts               # compile TS launcher
+cargo build                    # build Rust binary
+cargo test                     # run Rust tests
+cargo fmt                      # format Rust code
+npm run test:smoke             # smoke test the built CLI
+npm run docs:generate          # regenerate docs/command-topics.md from CLI help output
+```
+
+## Key conventions
+
+- **Provider-explicit commands**: always `agent-ads meta ...`, never `agent-ads campaigns ...`
+- **No colon syntax**: `agent-ads meta insights query`, not `agent-ads meta:insights:query`
+- **Secrets from env only**: `META_ADS_ACCESS_TOKEN` and `META_ADS_APP_SECRET` come from environment variables or `.env`, never from flags or config files
+- **Config precedence**: CLI flags > shell env > `.env` > `agent-ads.config.json`
+- **Data-only output**: stdout is raw JSON by default (no envelope). Use `--envelope` for metadata/paging wrapper
+- **Errors on stderr**: always JSON format
+- **Exit codes**: 0=success, 1=transport/internal, 2=config/argument, 3=Meta API
+- **Read-only**: the CLI does not create, update, or delete any ad objects
+
+## Adding new commands
+
+1. Add the endpoint function in `crates/agent_ads_core/src/endpoints.rs`
+2. Add clap args and dispatch in `crates/agent_ads_cli/src/main.rs`
+3. Always include an `about = "..."` on the clap subcommand
+4. Run `cargo fmt && cargo test`
+5. Update the relevant reference doc in `skills/agent-ads/references/`
+6. Run `npm run docs:generate` to update the generated CLI reference
+
+## Testing
+
+- `cargo test` runs unit tests (clap arg parsing, help rendering)
+- `npm run test:smoke` runs the built binary with `--help` and `providers list`
+- There are no integration tests that hit the Meta API (would require real tokens)
+
+## Docs structure
+
+- `README.md` — human-facing project overview
+- `CLAUDE.md` — this file, for agents
+- `skills/agent-ads/SKILL.md` — agent skill entrypoint
+- `skills/agent-ads/references/meta.md` — Meta routing guide
+- `skills/agent-ads/references/meta-*.md` — topic-specific reference files
+- `docs/command-topics.md` — generated exhaustive CLI reference
+
+Do not edit `docs/command-topics.md` by hand. Edit clap `about`/`help` strings in Rust source and regenerate.

@@ -87,7 +87,7 @@ pub mod accounts {
             ],
         );
         let edge = match scope {
-            AdAccountScope::Accessible => "ad_accounts",
+            AdAccountScope::Accessible => "client_ad_accounts",
             AdAccountScope::Owned => "owned_ad_accounts",
             AdAccountScope::PendingClient => "pending_client_ad_accounts",
         };
@@ -614,12 +614,7 @@ pub mod tracking {
                 "name",
                 "event_stats",
                 "last_fired_time",
-                "server_last_fired_time",
                 "match_rate_approx",
-                "collection_rate",
-                "upload_rate",
-                "valid_entries",
-                "matched_entries",
             ],
         );
         client.get_node(dataset_id, &BTreeMap::new(), &fields).await

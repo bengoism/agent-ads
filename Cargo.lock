@@ -3,6 +3,38 @@
 version = 3
 
 [[package]]
+name = "agent_ads_cli"
+version = "0.1.1"
+dependencies = [
+ "agent_ads_core",
+ "clap",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "agent_ads_core"
+version = "0.1.1"
+dependencies = [
+ "csv",
+ "dotenvy",
+ "hex",
+ "hmac",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "wiremock",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -840,38 +872,6 @@ name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
-
-[[package]]
-name = "meta_ads_cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "meta_ads_core",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "meta_ads_core"
-version = "0.1.0"
-dependencies = [
- "csv",
- "dotenvy",
- "hex",
- "hmac",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "url",
- "wiremock",
-]
 
 [[package]]
 name = "mio"

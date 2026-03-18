@@ -4,3 +4,4 @@
 /dist
 /npm/platform/*/bin
 /coverage
+.env

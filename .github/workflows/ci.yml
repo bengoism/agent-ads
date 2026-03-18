@@ -24,7 +24,7 @@ jobs:
       - name: Test
         run: cargo test --workspace
       - name: Smoke
-        run: cargo run -p meta_ads_cli -- --help
+        run: cargo run -p agent_ads_cli -- --help
       - name: Npm Smoke
         run: npm run test:smoke
       - name: Npm Pack Dry Run

@@ -1,22 +1,57 @@
-# `agent-ads`
+# agent-ads
 
-Provider-first ads CLI for agents, analysts, and CI jobs.
+Unix-first multi-provider ads CLI for analysts, agents, and CI jobs.
 
-Install:
+Query ad accounts, pull performance reports, inspect creatives, and diagnose tracking health — all from the terminal. Built in Rust with prebuilt native binaries.
+
+## Install
 
 ```bash
 npm install -g agent-ads
 ```
 
-Use:
+## Quick Start
 
 ```bash
-agent-ads --help
-agent-ads providers list
+# Set up your Meta access token
+export META_ADS_ACCESS_TOKEN=EAABs...
+
+# Verify your setup
 agent-ads meta doctor
+
+# List your businesses and ad accounts
+agent-ads meta businesses list
+agent-ads meta ad-accounts list --business-id 1234567890
+
+# Pull a performance report
+agent-ads meta insights query \
+  --account act_1234567890 \
+  --level campaign \
+  --fields campaign_id,campaign_name,impressions,clicks,spend \
+  --date-preset last_7d
 ```
 
-For full docs and source, see:
+## What's Supported
 
-- https://github.com/bengoism/agent-ads
-- https://github.com/bengoism/agent-ads/tree/main/skills/agent-ads
+- **Meta (Facebook/Instagram)**: businesses, ad accounts, campaigns, ad sets, ads, insights (sync + async), creatives, activities, pixels, datasets, pixel health
+- **Google Ads**: namespace reserved, not yet implemented
+- **TikTok Ads**: namespace reserved, not yet implemented
+
+## Key Features
+
+- Provider-explicit commands (`agent-ads meta ...`) — no leaky abstractions
+- Data-only JSON on stdout by default (pipe to `jq`, redirect to files)
+- CSV and JSONL output formats
+- Cursor-based auto-pagination (`--all`, `--max-items`)
+- Async report support (`--async --wait`)
+- Config file + `.env` + CLI flag layering
+
+## Full Documentation
+
+- [GitHub repo](https://github.com/bengoism/agent-ads)
+- [Agent skill](https://github.com/bengoism/agent-ads/tree/main/skills/agent-ads)
+- [Meta reference docs](https://github.com/bengoism/agent-ads/tree/main/skills/agent-ads/references)
+
+## License
+
+MIT

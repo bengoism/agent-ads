@@ -22,25 +22,25 @@ Unix-first multi-provider ads CLI
 Usage: agent-ads [OPTIONS] <COMMAND>
 
 Commands:
-  providers  
-  meta       
-  google     Google Ads provider namespace. Commands are not implemented yet.
-  tiktok     TikTok Ads provider namespace. Commands are not implemented yet.
+  providers  Inspect available and planned ad providers
+  meta       Meta (Facebook/Instagram) Marketing API commands
+  google     Google Ads provider namespace (not implemented yet)
+  tiktok     TikTok Ads provider namespace (not implemented yet)
   help       Print this message or the help of the given subcommand(s)
 
 Options:
-      --config <CONFIG>                    
-      --env-file <ENV_FILE>                
-      --api-base-url <API_BASE_URL>        
-      --api-version <API_VERSION>          
-      --timeout-seconds <TIMEOUT_SECONDS>  
-      --format <FORMAT>                    [possible values: json, jsonl, csv]
-      --output <OUTPUT>                    
-      --pretty                             
-      --envelope                           
-      --include-meta                       
-  -q, --quiet                              
-  -v, --verbose...                         
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
   -h, --help                               Print help
   -V, --version                            Print version
 ```
@@ -66,28 +66,42 @@ agent-ads meta --help
 ```
 
 ```text
-Usage: agent-ads meta <COMMAND>
+Meta (Facebook/Instagram) Marketing API commands
+
+Usage: agent-ads meta [OPTIONS] <COMMAND>
 
 Commands:
-  businesses          
-  ad-accounts         
-  campaigns           
-  adsets              
-  ads                 
-  insights            
-  report-runs         
-  creatives           
-  activities          
-  custom-conversions  
-  pixels              
-  datasets            
-  pixel-health        
-  doctor              
-  config              
+  businesses          List businesses accessible to your token
+  ad-accounts         List ad accounts under a business
+  campaigns           List campaigns in an ad account
+  adsets              List ad sets in an ad account
+  ads                 List ads in an ad account
+  insights            Query performance insights (sync and async)
+  report-runs         Manage async report run lifecycle
+  creatives           Inspect ad creatives and previews
+  activities          List account activity and change history
+  custom-conversions  List custom conversion rules
+  pixels              List tracking pixels
+  datasets            Get dataset quality metrics
+  pixel-health        Combined pixel health diagnostics
+  doctor              Verify auth, config, and API connectivity
+  config              Inspect and validate configuration
   help                Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Businesses
@@ -97,14 +111,28 @@ agent-ads meta businesses --help
 ```
 
 ```text
-Usage: agent-ads meta businesses <COMMAND>
+List businesses accessible to your token
+
+Usage: agent-ads meta businesses [OPTIONS] <COMMAND>
 
 Commands:
-  list  [aliases: ls]
+  list  List businesses accessible to your token [aliases: ls]
   help  Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Ad Accounts
@@ -114,14 +142,28 @@ agent-ads meta ad-accounts --help
 ```
 
 ```text
-Usage: agent-ads meta ad-accounts <COMMAND>
+List ad accounts under a business
+
+Usage: agent-ads meta ad-accounts [OPTIONS] <COMMAND>
 
 Commands:
-  list  [aliases: ls]
+  list  List ad accounts by scope [aliases: ls]
   help  Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Campaigns
@@ -131,14 +173,28 @@ agent-ads meta campaigns --help
 ```
 
 ```text
-Usage: agent-ads meta campaigns <COMMAND>
+List campaigns in an ad account
+
+Usage: agent-ads meta campaigns [OPTIONS] <COMMAND>
 
 Commands:
-  list  [aliases: ls]
+  list  List objects in an ad account [aliases: ls]
   help  Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Insights
@@ -148,15 +204,29 @@ agent-ads meta insights --help
 ```
 
 ```text
-Usage: agent-ads meta insights <COMMAND>
+Query performance insights (sync and async)
+
+Usage: agent-ads meta insights [OPTIONS] <COMMAND>
 
 Commands:
-  query   
-  export  
+  query   Run a synchronous insights query
+  export  Query insights with optional async mode
   help    Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Report Runs
@@ -166,17 +236,31 @@ agent-ads meta report-runs --help
 ```
 
 ```text
-Usage: agent-ads meta report-runs <COMMAND>
+Manage async report run lifecycle
+
+Usage: agent-ads meta report-runs [OPTIONS] <COMMAND>
 
 Commands:
-  submit   
-  status   
-  results  
-  wait     
+  submit   Submit an async report run
+  status   Check async report run status
+  results  Fetch completed report run results
+  wait     Poll until a report run completes
   help     Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Creatives
@@ -186,15 +270,29 @@ agent-ads meta creatives --help
 ```
 
 ```text
-Usage: agent-ads meta creatives <COMMAND>
+Inspect ad creatives and previews
+
+Usage: agent-ads meta creatives [OPTIONS] <COMMAND>
 
 Commands:
-  get      [aliases: cat]
-  preview  
+  get      Fetch a creative by ID [aliases: cat]
+  preview  Get rendered ad preview
   help     Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Activities
@@ -204,14 +302,28 @@ agent-ads meta activities --help
 ```
 
 ```text
-Usage: agent-ads meta activities <COMMAND>
+List account activity and change history
+
+Usage: agent-ads meta activities [OPTIONS] <COMMAND>
 
 Commands:
-  list  [aliases: ls]
+  list  List account activity and change history [aliases: ls]
   help  Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Tracking
@@ -223,14 +335,28 @@ agent-ads meta pixel-health --help
 ```
 
 ```text
-Usage: agent-ads meta pixel-health <COMMAND>
+Combined pixel health diagnostics
+
+Usage: agent-ads meta pixel-health [OPTIONS] <COMMAND>
 
 Commands:
-  get   [aliases: cat]
+  get   Get combined pixel health diagnostics [aliases: cat]
   help  Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Config
@@ -240,16 +366,30 @@ agent-ads meta config --help
 ```
 
 ```text
-Usage: agent-ads meta config <COMMAND>
+Inspect and validate configuration
+
+Usage: agent-ads meta config [OPTIONS] <COMMAND>
 
 Commands:
-  path      
-  show      
-  validate  
+  path      Show resolved config file path
+  show      Show full resolved configuration
+  validate  Validate config file
   help      Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help  Print help
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --env-file <ENV_FILE>                Env file for secrets [default: ./.env]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Google Placeholder

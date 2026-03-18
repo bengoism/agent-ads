@@ -2,6 +2,7 @@
   "name": "agent-ads-workspace",
   "private": true,
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "build:ts": "tsc -p npm/tsconfig.json",
     "build:npm": "npm run build:ts && node npm/agent-ads/scripts/prepare-release.js",
     "docs:generate": "npm run build:ts && node npm/agent-ads/scripts/generate-command-topics.js",
