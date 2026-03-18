@@ -2,7 +2,7 @@
 
 CLI for querying ad platform APIs.
 
-Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram) supported today, read-only.
+Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram) and TikTok supported today, read-only.
 
 ## Install
 
@@ -29,7 +29,7 @@ cargo build
 
 The npm package is a thin CLI launcher. There is no supported JavaScript API.
 
-## Quick Start
+## Quick Start (Meta)
 
 ### 1. Authenticate
 
@@ -134,6 +134,82 @@ agent-ads meta insights query \
   --output report.csv
 ```
 
+## Quick Start (TikTok)
+
+### 1. Authenticate
+
+TikTok requires an access token and app credentials. Store the token in your OS credential store:
+
+```bash
+agent-ads tiktok auth set
+```
+
+Or set shell variables:
+
+```bash
+export TIKTOK_ADS_ACCESS_TOKEN=abc123...
+export TIKTOK_ADS_APP_ID=your_app_id
+export TIKTOK_ADS_APP_SECRET=your_app_secret
+```
+
+TikTok tokens expire every 24 hours. Refresh with:
+
+```bash
+agent-ads tiktok auth refresh \
+  --app-id $TIKTOK_ADS_APP_ID \
+  --app-secret $TIKTOK_ADS_APP_SECRET
+```
+
+### 2. Verify your setup
+
+```bash
+agent-ads tiktok doctor
+```
+
+Add `--api` to also ping the TikTok API and confirm your token works.
+
+### 3. Discover your advertisers
+
+```bash
+agent-ads tiktok advertisers list \
+  --app-id $TIKTOK_ADS_APP_ID \
+  --app-secret $TIKTOK_ADS_APP_SECRET
+```
+
+### 4. Explore campaigns
+
+```bash
+agent-ads tiktok campaigns list --advertiser-id 1234567890
+```
+
+### 5. Pull a performance report
+
+```bash
+agent-ads tiktok insights query \
+  --advertiser-id 1234567890 \
+  --report-type BASIC \
+  --data-level AUCTION_CAMPAIGN \
+  --dimensions campaign_id \
+  --metrics spend,impressions,clicks,ctr \
+  --start-date 2026-03-01 \
+  --end-date 2026-03-16
+```
+
+### 6. Export to CSV
+
+```bash
+agent-ads tiktok insights query \
+  --advertiser-id 1234567890 \
+  --report-type BASIC \
+  --data-level AUCTION_CAMPAIGN \
+  --dimensions campaign_id \
+  --metrics spend,impressions,clicks \
+  --start-date 2026-03-01 \
+  --end-date 2026-03-16 \
+  --format csv \
+  --output report.csv
+```
+
 ## Command Overview
 
 Providers are always explicit: `agent-ads <provider> <command>`. There is no cross-provider abstraction.
@@ -144,8 +220,8 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 |---------|-------------|
 | `agent-ads providers list` | Show available and planned providers |
 | `agent-ads meta ...` | Meta Marketing API commands |
+| `agent-ads tiktok ...` | TikTok Business API commands |
 | `agent-ads google` | Placeholder (not implemented) |
-| `agent-ads tiktok` | Placeholder (not implemented) |
 
 ### Meta: Discovery
 
@@ -197,6 +273,47 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 | `meta config validate` | Validate config file |
 | `meta doctor` | Verify auth, config, and (optionally) API connectivity |
 
+### TikTok: Discovery
+
+| Command | Description |
+|---------|-------------|
+| `tiktok advertisers list` | List advertisers accessible to your token |
+| `tiktok advertisers info` | Get advertiser details |
+| `tiktok campaigns list` | List campaigns for an advertiser |
+| `tiktok adgroups list` | List ad groups for an advertiser |
+| `tiktok ads list` | List ads for an advertiser |
+
+### TikTok: Reporting
+
+| Command | Description |
+|---------|-------------|
+| `tiktok insights query` | Synchronous reporting query |
+| `tiktok report-runs submit` | Submit an async report task |
+| `tiktok report-runs status` | Check async report task status |
+| `tiktok report-runs cancel` | Cancel an async report task |
+
+### TikTok: Creative & Tracking
+
+| Command | Description |
+|---------|-------------|
+| `tiktok creatives videos` | List video creative assets |
+| `tiktok creatives images` | List image creative assets |
+| `tiktok pixels list` | List pixels for an advertiser |
+| `tiktok audiences list` | List custom audiences |
+
+### TikTok: Config & Diagnostics
+
+| Command | Description |
+|---------|-------------|
+| `tiktok auth set` | Store the TikTok token in the OS credential store |
+| `tiktok auth status` | Show auth source and secure storage status |
+| `tiktok auth delete` | Delete the stored TikTok token |
+| `tiktok auth refresh` | Refresh the TikTok access token |
+| `tiktok config path` | Show resolved config file path |
+| `tiktok config show` | Show full resolved configuration |
+| `tiktok config validate` | Validate config file |
+| `tiktok doctor` | Verify auth, config, and (optionally) API connectivity |
+
 ## Global Flags
 
 These flags work with any command:
@@ -217,7 +334,9 @@ These flags work with any command:
 
 ## Pagination
 
-List commands support cursor-based pagination:
+Pagination differs by provider.
+
+### Meta (cursor-based)
 
 | Flag | Description |
 |------|-------------|
@@ -228,14 +347,23 @@ List commands support cursor-based pagination:
 
 Use `--all` to fetch everything, or `--max-items 100` to cap results. Without either flag, you get one page of results and can use `--envelope` to see the paging cursor for the next page.
 
+### TikTok (page-number)
+
+| Flag | Description |
+|------|-------------|
+| `--page-size <n>` | Number of items per page |
+| `--page <n>` | Page number (1-indexed) |
+| `--all` | Automatically follow all pages |
+| `--max-items <n>` | Stop after collecting N total items |
+
 ## Configuration
 
 ### Secret resolution
 
-`META_ADS_ACCESS_TOKEN` resolves in this order:
+Tokens resolve in this order (per provider):
 
-1. Shell environment (`META_ADS_ACCESS_TOKEN`)
-2. OS credential store (`agent-ads meta auth set`)
+1. Shell environment (`META_ADS_ACCESS_TOKEN` / `TIKTOK_ADS_ACCESS_TOKEN`)
+2. OS credential store (`agent-ads <provider> auth set`)
 
 `.env` files are not read.
 
@@ -263,18 +391,28 @@ Supported keys:
       "timeout_seconds": 60,
       "default_business_id": "1234567890",
       "default_account_id": "act_1234567890"
+    },
+    "tiktok": {
+      "api_base_url": "https://business-api.tiktok.com",
+      "api_version": "v1.3",
+      "timeout_seconds": 60,
+      "default_advertiser_id": "1234567890"
     }
   }
 }
 ```
 
-Setting `default_business_id` and `default_account_id` lets you omit `--business-id` and `--account` from commands.
+Setting `default_business_id` / `default_account_id` (Meta) or `default_advertiser_id` (TikTok) lets you omit those flags from commands.
 
 ### Environment variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `META_ADS_ACCESS_TOKEN` | No | Shell override / CI fallback for the Meta API access token |
+| Variable | Provider | Required | Description |
+|----------|----------|----------|-------------|
+| `META_ADS_ACCESS_TOKEN` | Meta | No | Shell override / CI fallback for the Meta API access token |
+| `TIKTOK_ADS_ACCESS_TOKEN` | TikTok | No | Shell override / CI fallback for the TikTok API access token |
+| `TIKTOK_ADS_REFRESH_TOKEN` | TikTok | No | Refresh token for `auth refresh` flow |
+| `TIKTOK_ADS_APP_ID` | TikTok | For `advertisers list` and `auth refresh` | TikTok app ID |
+| `TIKTOK_ADS_APP_SECRET` | TikTok | For `advertisers list` and `auth refresh` | TikTok app secret |
 
 Secrets are never read from config files or CLI flags. Persistent secrets live in the OS credential store; shell environment variables remain supported for temporary runs and CI.
 
@@ -326,6 +464,7 @@ agent-ads meta businesses list --envelope --pretty
 | 1 | Transport or internal error |
 | 2 | Config or argument error |
 | 3 | Meta API error |
+| 4 | TikTok API error |
 
 ## Docs Map
 
@@ -334,8 +473,9 @@ agent-ads meta businesses list --envelope --pretty
 | Humans | This README, then `agent-ads --help` |
 | AI agents | [skills/agent-ads/SKILL.md](skills/agent-ads/SKILL.md) |
 | Meta provider deep-dive | [skills/agent-ads/references/meta.md](skills/agent-ads/references/meta.md) |
+| TikTok provider deep-dive | [skills/agent-ads/references/tiktok.md](skills/agent-ads/references/tiktok.md) |
 | Full CLI reference (generated) | [docs/command-topics.md](docs/command-topics.md) |
-| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads meta insights query --help` |
+| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads tiktok --help` |
 
 ## Skills
 
