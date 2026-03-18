@@ -2,13 +2,13 @@
 name: agent-ads
 description: >
   Operate the provider-first ads CLI from the terminal. Use when the user wants
-  to inspect available ad providers, route work into the implemented Meta
-  provider, or keep ad-provider commands explicit inside `agent-ads`.
+  to inspect available ad providers, route work into the implemented Meta or
+  TikTok providers, or keep ad-provider commands explicit inside `agent-ads`.
 ---
 
 # Agent Ads
 
-`agent-ads` is a Unix-first CLI for querying ad platform APIs. It supports Meta (Facebook/Instagram) Marketing API today, with Google and TikTok namespaces reserved for future implementation. All commands are read-only.
+`agent-ads` is a Unix-first CLI for querying ad platform APIs. It supports Meta (Facebook/Instagram) Marketing API and TikTok Business API. Google Ads namespace is reserved for future implementation. All commands are read-only.
 
 This file is the only public skill entrypoint. It routes you to provider-specific reference docs.
 
@@ -25,8 +25,8 @@ Every command starts with `agent-ads <provider>`. This is intentional — each a
 | Provider | Status | Summary |
 |----------|--------|---------|
 | `meta` | Implemented | Read-only Meta Marketing API: accounts, campaigns, insights, creatives, tracking |
+| `tiktok` | Implemented | Read-only TikTok Business API: advertisers, campaigns, insights, creatives, pixels, audiences |
 | `google` | Reserved | Namespace exists, commands not implemented |
-| `tiktok` | Reserved | Namespace exists, commands not implemented |
 
 Check live: `agent-ads providers list`
 
@@ -36,7 +36,8 @@ Check live: `agent-ads providers list`
 |------|---------------|-----------|
 | See which providers exist | `agent-ads providers list` | this file |
 | Work with Meta (accounts, reports, creatives, tracking) | `agent-ads meta --help` | [references/meta.md](references/meta.md) |
-| Work with Google or TikTok | n/a | tell the user the namespace exists but is not implemented yet |
+| Work with TikTok (advertisers, campaigns, insights, creatives) | `agent-ads tiktok --help` | [references/tiktok.md](references/tiktok.md) |
+| Work with Google | n/a | tell the user the namespace exists but is not implemented yet |
 
 ## Global Flags
 
@@ -70,9 +71,11 @@ All list commands support:
 - **stdout**: data-only JSON by default (just the array or object, no wrapper)
 - **stderr**: errors as JSON, warnings as plain text
 - **`--envelope`**: wraps stdout with `{ "data": ..., "meta": ..., "paging": ... }`
-- **Exit codes**: 0 = success, 1 = transport/internal, 2 = config/argument, 3 = API error
+- **Exit codes**: 0 = success, 1 = transport/internal, 2 = config/argument, 3 = Meta API error, 4 = TikTok API error
 
 ## Token Permissions
+
+### Meta
 
 The user's `META_ADS_ACCESS_TOKEN` needs specific Meta permissions (scopes) depending on what commands they run:
 
@@ -83,10 +86,14 @@ The user's `META_ADS_ACCESS_TOKEN` needs specific Meta permissions (scopes) depe
 
 Both are read-only — no write access is granted. If the user gets a "Missing Permission" error, they need to regenerate their token with the correct scopes at the [Graph API Explorer](https://developers.facebook.com/tools/explorer/).
 
+### TikTok
+
+The user's `TIKTOK_ADS_ACCESS_TOKEN` is obtained through TikTok's OAuth flow and expires every 24 hours. Use `agent-ads tiktok auth refresh` to rotate. The `advertisers list` and `auth refresh` commands require app credentials (`TIKTOK_ADS_APP_ID` and `TIKTOK_ADS_APP_SECRET`).
+
 ## Auth Storage
 
-- Persistent auth: `agent-ads meta auth set`
-- Shell override / CI fallback: `META_ADS_ACCESS_TOKEN=... agent-ads ...`
+- Persistent auth: `agent-ads meta auth set` / `agent-ads tiktok auth set`
+- Shell override / CI fallback: `META_ADS_ACCESS_TOKEN=...` or `TIKTOK_ADS_ACCESS_TOKEN=...`
 - Linux secure storage requires a running Secret Service provider such as GNOME Keyring or KWallet
 
 ## Worked Example
@@ -134,6 +141,17 @@ When the provider is `meta`, read [references/meta.md](references/meta.md) first
 - Creatives and activity history → `meta-creative-and-changes.md`
 - Pixels, datasets, measurement health → `meta-tracking.md`
 - End-to-end recipes → `meta-workflows.md`
+
+Load only the reference file you need. Do not load all of them at once.
+
+## TikTok Routing
+
+When the provider is `tiktok`, read [references/tiktok.md](references/tiktok.md) first. That file is a routing guide — it tells you which specific reference file to load based on the task:
+
+- Auth, config, refresh tokens → `tiktok-auth.md`
+- Advertisers, campaigns, ad groups, ads → `tiktok-accounts-and-objects.md`
+- Insights queries and async report tasks → `tiktok-reports.md`
+- Creative assets, pixels, audiences → `tiktok-creative-and-tracking.md`
 
 Load only the reference file you need. Do not load all of them at once.
 
