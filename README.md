@@ -1,11 +1,8 @@
 # agent-ads
 
-Unix-first multi-provider ads CLI for analysts, agents, and CI jobs.
+CLI for querying ad platform APIs.
 
-Query ad accounts, pull performance reports, inspect creatives, and diagnose tracking health — all from the terminal. Built in Rust, distributed through npm with prebuilt native binaries.
-
-**Currently supported:** Meta (Facebook/Instagram) Marketing API (read-only).
-**Namespaces reserved:** Google Ads, TikTok Ads (not yet implemented).
+Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram) supported today, read-only.
 
 ## Install
 
