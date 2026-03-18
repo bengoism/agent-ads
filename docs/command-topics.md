@@ -25,7 +25,7 @@ Commands:
   providers  Inspect available and planned ad providers
   meta       Meta (Facebook/Instagram) Marketing API commands
   google     Google Ads provider namespace (not implemented yet)
-  tiktok     TikTok Ads provider namespace (not implemented yet)
+  tiktok     TikTok Business API commands
   help       Print this message or the help of the given subcommand(s)
 
 Options:
@@ -53,7 +53,7 @@ agent-ads providers list
 ```
 
 ```json
-[{"implemented":true,"provider":"meta","status":"available","summary":"Read-only Meta Marketing API support."},{"implemented":false,"provider":"google","status":"planned","summary":"Google Ads namespace is reserved but not implemented yet."},{"implemented":false,"provider":"tiktok","status":"planned","summary":"TikTok Ads namespace is reserved but not implemented yet."}]
+[{"implemented":true,"provider":"meta","status":"available","summary":"Read-only Meta Marketing API support."},{"implemented":false,"provider":"google","status":"planned","summary":"Google Ads namespace is reserved but not implemented yet."},{"implemented":true,"provider":"tiktok","status":"available","summary":"Read-only TikTok Business API support."}]
 ```
 
 ## Meta Topic
@@ -414,6 +414,268 @@ Options:
   -h, --help                               Print help
 ```
 
+## TikTok Topic
+
+The TikTok provider covers the TikTok Business API.
+
+```bash
+agent-ads tiktok --help
+```
+
+```text
+TikTok Business API commands
+
+Usage: agent-ads tiktok [OPTIONS] <COMMAND>
+
+Commands:
+  advertisers  List and inspect advertiser accounts
+  campaigns    List campaigns
+  adgroups     List ad groups
+  ads          List ads
+  insights     Query performance insights (synchronous)
+  report-runs  Manage async report tasks
+  creatives    Search video and image creative assets
+  pixels       List tracking pixels
+  audiences    List custom audiences
+  auth         Manage stored auth token
+  doctor       Verify auth, config, and API connectivity
+  config       Inspect and validate configuration
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## TikTok Advertisers
+
+```bash
+agent-ads tiktok advertisers --help
+```
+
+```text
+List and inspect advertiser accounts
+
+Usage: agent-ads tiktok advertisers [OPTIONS] <COMMAND>
+
+Commands:
+  list  List authorized advertisers [aliases: ls]
+  info  Get advertiser account details [aliases: cat]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## TikTok Campaigns
+
+```bash
+agent-ads tiktok campaigns --help
+```
+
+```text
+List campaigns
+
+Usage: agent-ads tiktok campaigns [OPTIONS] <COMMAND>
+
+Commands:
+  list  List objects for an advertiser [aliases: ls]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## TikTok Insights
+
+```bash
+agent-ads tiktok insights --help
+```
+
+```text
+Query performance insights (synchronous)
+
+Usage: agent-ads tiktok insights [OPTIONS] <COMMAND>
+
+Commands:
+  query  Run a synchronous insights query
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## TikTok Report Runs
+
+```bash
+agent-ads tiktok report-runs --help
+```
+
+```text
+Manage async report tasks
+
+Usage: agent-ads tiktok report-runs [OPTIONS] <COMMAND>
+
+Commands:
+  submit  Create an async report task
+  status  Check async report task status
+  cancel  Cancel an async report task
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## TikTok Creatives
+
+```bash
+agent-ads tiktok creatives --help
+```
+
+```text
+Search video and image creative assets
+
+Usage: agent-ads tiktok creatives [OPTIONS] <COMMAND>
+
+Commands:
+  videos  Search video assets
+  images  Get image info by IDs
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## TikTok Auth
+
+```bash
+agent-ads tiktok auth --help
+```
+
+```text
+Manage stored auth token
+
+Usage: agent-ads tiktok auth [OPTIONS] <COMMAND>
+
+Commands:
+  set      Store the TikTok access token in the OS credential store
+  status   Show auth source and secure storage status
+  delete   Delete the stored TikTok tokens
+  refresh  Refresh the access token using a stored refresh token
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## TikTok Config
+
+```bash
+agent-ads tiktok config --help
+```
+
+```text
+Inspect and validate configuration
+
+Usage: agent-ads tiktok config [OPTIONS] <COMMAND>
+
+Commands:
+  path      Show resolved config file path
+  show      Show full resolved configuration
+  validate  Validate config file
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
 ## Google Placeholder
 
 Google is an explicit namespace, but it is not implemented yet.
@@ -424,16 +686,4 @@ agent-ads google
 
 ```json
 {"implemented":false,"message":"google commands are not implemented yet. Use `agent-ads providers list` to inspect available providers or `agent-ads meta ...` for the current implementation.","provider":"google"}
-```
-
-## TikTok Placeholder
-
-TikTok is an explicit namespace, but it is not implemented yet.
-
-```bash
-agent-ads tiktok
-```
-
-```json
-{"implemented":false,"message":"tiktok commands are not implemented yet. Use `agent-ads providers list` to inspect available providers or `agent-ads meta ...` for the current implementation.","provider":"tiktok"}
 ```

@@ -9,6 +9,7 @@ use crate::output::OutputFormat;
 use crate::secret_store::{
     SecretStore, SecretStoreErrorKind, META_ACCESS_TOKEN_ACCOUNT, META_ACCESS_TOKEN_SERVICE,
 };
+use crate::tiktok_config::TikTokFileConfig;
 
 pub const DEFAULT_CONFIG_FILE: &str = "agent-ads.config.json";
 pub const DEFAULT_API_BASE_URL: &str = "https://graph.facebook.com";
@@ -29,6 +30,8 @@ pub struct FileConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProviderFileConfigs {
     pub meta: Option<FileConfig>,
+    #[serde(default)]
+    pub tiktok: Option<TikTokFileConfig>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -291,13 +294,19 @@ fn access_token_guidance() -> String {
     message
 }
 
-fn load_file_config(path: &Path) -> Result<FileConfig> {
+/// Load and return the full root file config. Used by provider-specific config
+/// modules (e.g. tiktok_config) to read their section from the shared config file.
+pub fn load_root_file_config(path: &Path) -> Result<RootFileConfig> {
     if !path.exists() {
-        return Ok(FileConfig::default());
+        return Ok(RootFileConfig::default());
     }
 
     let contents = fs::read_to_string(path)?;
-    let config = serde_json::from_str::<RootFileConfig>(&contents)?;
+    Ok(serde_json::from_str::<RootFileConfig>(&contents)?)
+}
+
+fn load_file_config(path: &Path) -> Result<FileConfig> {
+    let config = load_root_file_config(path)?;
     Ok(merge_file_config(
         config.legacy_meta,
         config.providers.meta.unwrap_or_default(),

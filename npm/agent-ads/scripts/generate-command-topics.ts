@@ -87,15 +87,50 @@ const sections: Section[] = [
     language: "text"
   },
   {
+    title: "TikTok Topic",
+    intro: "The TikTok provider covers the TikTok Business API.",
+    args: ["tiktok", "--help"],
+    language: "text"
+  },
+  {
+    title: "TikTok Advertisers",
+    args: ["tiktok", "advertisers", "--help"],
+    language: "text"
+  },
+  {
+    title: "TikTok Campaigns",
+    args: ["tiktok", "campaigns", "--help"],
+    language: "text"
+  },
+  {
+    title: "TikTok Insights",
+    args: ["tiktok", "insights", "--help"],
+    language: "text"
+  },
+  {
+    title: "TikTok Report Runs",
+    args: ["tiktok", "report-runs", "--help"],
+    language: "text"
+  },
+  {
+    title: "TikTok Creatives",
+    args: ["tiktok", "creatives", "--help"],
+    language: "text"
+  },
+  {
+    title: "TikTok Auth",
+    args: ["tiktok", "auth", "--help"],
+    language: "text"
+  },
+  {
+    title: "TikTok Config",
+    args: ["tiktok", "config", "--help"],
+    language: "text"
+  },
+  {
     title: "Google Placeholder",
     intro: "Google is an explicit namespace, but it is not implemented yet.",
     args: ["google"],
-    language: "json"
-  },
-  {
-    title: "TikTok Placeholder",
-    intro: "TikTok is an explicit namespace, but it is not implemented yet.",
-    args: ["tiktok"],
     language: "json"
   }
 ];

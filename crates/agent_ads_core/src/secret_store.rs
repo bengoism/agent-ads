@@ -3,6 +3,11 @@ use keyring::{Entry, Error as KeyringError};
 pub const META_ACCESS_TOKEN_SERVICE: &str = "agent-ads";
 pub const META_ACCESS_TOKEN_ACCOUNT: &str = "meta-access-token";
 
+pub const TIKTOK_ACCESS_TOKEN_SERVICE: &str = "agent-ads";
+pub const TIKTOK_ACCESS_TOKEN_ACCOUNT: &str = "tiktok-access-token";
+pub const TIKTOK_REFRESH_TOKEN_SERVICE: &str = "agent-ads";
+pub const TIKTOK_REFRESH_TOKEN_ACCOUNT: &str = "tiktok-refresh-token";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretStoreErrorKind {
     Unavailable,
