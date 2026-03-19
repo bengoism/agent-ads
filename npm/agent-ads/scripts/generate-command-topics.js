@@ -121,6 +121,47 @@ const sections = [
         language: "text"
     },
     {
+        title: "Pinterest Topic",
+        intro: "The Pinterest provider covers the Pinterest Ads API.",
+        args: ["pinterest", "--help"],
+        language: "text"
+    },
+    {
+        title: "Pinterest Ad Accounts",
+        args: ["pinterest", "ad-accounts", "--help"],
+        language: "text"
+    },
+    {
+        title: "Pinterest Campaigns",
+        args: ["pinterest", "campaigns", "--help"],
+        language: "text"
+    },
+    {
+        title: "Pinterest Analytics",
+        args: ["pinterest", "analytics", "--help"],
+        language: "text"
+    },
+    {
+        title: "Pinterest Report Runs",
+        args: ["pinterest", "report-runs", "--help"],
+        language: "text"
+    },
+    {
+        title: "Pinterest Audiences",
+        args: ["pinterest", "audiences", "--help"],
+        language: "text"
+    },
+    {
+        title: "Pinterest Auth",
+        args: ["pinterest", "auth", "--help"],
+        language: "text"
+    },
+    {
+        title: "Pinterest Config",
+        args: ["pinterest", "config", "--help"],
+        language: "text"
+    },
+    {
         title: "Google Topic",
         intro: "The Google provider covers read-only Google Ads and native GAQL access.",
         args: ["google", "--help"],

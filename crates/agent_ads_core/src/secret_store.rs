@@ -12,6 +12,15 @@ pub const GOOGLE_ADS_CLIENT_SECRET_ACCOUNT: &str = "google-ads-client-secret";
 pub const GOOGLE_ADS_REFRESH_TOKEN_SERVICE: &str = "agent-ads";
 pub const GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT: &str = "google-ads-refresh-token";
 
+pub const PINTEREST_ADS_APP_ID_SERVICE: &str = "agent-ads";
+pub const PINTEREST_ADS_APP_ID_ACCOUNT: &str = "pinterest-ads-app-id";
+pub const PINTEREST_ADS_APP_SECRET_SERVICE: &str = "agent-ads";
+pub const PINTEREST_ADS_APP_SECRET_ACCOUNT: &str = "pinterest-ads-app-secret";
+pub const PINTEREST_ADS_ACCESS_TOKEN_SERVICE: &str = "agent-ads";
+pub const PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT: &str = "pinterest-ads-access-token";
+pub const PINTEREST_ADS_REFRESH_TOKEN_SERVICE: &str = "agent-ads";
+pub const PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT: &str = "pinterest-ads-refresh-token";
+
 pub const TIKTOK_ACCESS_TOKEN_SERVICE: &str = "agent-ads";
 pub const TIKTOK_ACCESS_TOKEN_ACCOUNT: &str = "tiktok-access-token";
 pub const TIKTOK_REFRESH_TOKEN_SERVICE: &str = "agent-ads";

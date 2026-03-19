@@ -26,6 +26,7 @@ Commands:
   meta       Meta (Facebook/Instagram) Marketing API commands
   google     Google Ads commands
   tiktok     TikTok Business API commands
+  pinterest  Pinterest Ads API commands
   help       Print this message or the help of the given subcommand(s)
 
 Options:
@@ -53,7 +54,7 @@ agent-ads providers list
 ```
 
 ```json
-[{"implemented":true,"provider":"meta","status":"available","summary":"Read-only Meta Marketing API support."},{"implemented":true,"provider":"google","status":"available","summary":"Read-only Google Ads support with native GAQL."},{"implemented":true,"provider":"tiktok","status":"available","summary":"Read-only TikTok Business API support."}]
+[{"implemented":true,"provider":"meta","status":"available","summary":"Read-only Meta Marketing API support."},{"implemented":true,"provider":"google","status":"available","summary":"Read-only Google Ads support with native GAQL."},{"implemented":true,"provider":"tiktok","status":"available","summary":"Read-only TikTok Business API support."},{"implemented":true,"provider":"pinterest","status":"available","summary":"Read-only Pinterest Ads API support."}]
 ```
 
 ## Meta Topic
@@ -654,6 +655,267 @@ agent-ads tiktok config --help
 Inspect and validate configuration
 
 Usage: agent-ads tiktok config [OPTIONS] <COMMAND>
+
+Commands:
+  path      Show resolved config file path
+  show      Show full resolved configuration
+  validate  Validate config file
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Pinterest Topic
+
+The Pinterest provider covers the Pinterest Ads API.
+
+```bash
+agent-ads pinterest --help
+```
+
+```text
+Pinterest Ads API commands
+
+Usage: agent-ads pinterest [OPTIONS] <COMMAND>
+
+Commands:
+  ad-accounts          List and inspect Pinterest ad accounts
+  campaigns            List campaigns
+  adgroups             List ad groups
+  ads                  List ads
+  analytics            Query Pinterest analytics synchronously
+  report-runs          Manage async Pinterest report runs
+  audiences            List and inspect audiences
+  targeting-analytics  Query targeting analytics
+  auth                 Manage stored Pinterest auth credentials
+  doctor               Verify auth, config, and API connectivity
+  config               Inspect and validate configuration
+  help                 Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Pinterest Ad Accounts
+
+```bash
+agent-ads pinterest ad-accounts --help
+```
+
+```text
+List and inspect Pinterest ad accounts
+
+Usage: agent-ads pinterest ad-accounts [OPTIONS] <COMMAND>
+
+Commands:
+  list  List ad accounts [aliases: ls]
+  get   Get a single ad account [aliases: cat]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Pinterest Campaigns
+
+```bash
+agent-ads pinterest campaigns --help
+```
+
+```text
+List campaigns
+
+Usage: agent-ads pinterest campaigns [OPTIONS] <COMMAND>
+
+Commands:
+  list  List campaigns for an ad account [aliases: ls]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Pinterest Analytics
+
+```bash
+agent-ads pinterest analytics --help
+```
+
+```text
+Query Pinterest analytics synchronously
+
+Usage: agent-ads pinterest analytics [OPTIONS] <COMMAND>
+
+Commands:
+  query  Run a synchronous analytics query
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Pinterest Report Runs
+
+```bash
+agent-ads pinterest report-runs --help
+```
+
+```text
+Manage async Pinterest report runs
+
+Usage: agent-ads pinterest report-runs [OPTIONS] <COMMAND>
+
+Commands:
+  submit  Submit an async report request
+  status  Check async report status
+  wait    Poll until the report reaches a terminal state
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Pinterest Audiences
+
+```bash
+agent-ads pinterest audiences --help
+```
+
+```text
+List and inspect audiences
+
+Usage: agent-ads pinterest audiences [OPTIONS] <COMMAND>
+
+Commands:
+  list  List audiences for an ad account [aliases: ls]
+  get   Get a single audience [aliases: cat]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Pinterest Auth
+
+```bash
+agent-ads pinterest auth --help
+```
+
+```text
+Manage stored Pinterest auth credentials
+
+Usage: agent-ads pinterest auth [OPTIONS] <COMMAND>
+
+Commands:
+  set      Store Pinterest app credentials and tokens in the OS credential store
+  status   Show auth source and secure storage status
+  delete   Delete stored Pinterest credentials
+  refresh  Refresh the access token using the stored refresh token
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Pinterest Config
+
+```bash
+agent-ads pinterest config --help
+```
+
+```text
+Inspect and validate configuration
+
+Usage: agent-ads pinterest config [OPTIONS] <COMMAND>
 
 Commands:
   path      Show resolved config file path
