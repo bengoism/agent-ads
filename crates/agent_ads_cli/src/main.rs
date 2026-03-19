@@ -204,19 +204,7 @@ async fn main() -> ExitCode {
     };
 
     let result = match cli.command {
-        Command::Providers { command } => {
-            if cli.format.is_none() {
-                output_options.format = match resolve_meta_output_format(
-                    cli.config.as_deref(),
-                    &secret_store,
-                    &overrides,
-                ) {
-                    Ok(format) => format,
-                    Err(error) => return exit_with_error(&error, &output_options),
-                };
-            }
-            Ok(handle_providers(command))
-        }
+        Command::Providers { command } => Ok(handle_providers(command)),
         Command::Google { command } => {
             if cli.format.is_none() {
                 output_options.format = match resolve_google_output_format(
