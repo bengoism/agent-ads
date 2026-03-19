@@ -440,10 +440,11 @@ Use `--all` to fetch everything, or `--max-items 100` to cap results. Without ei
 
 | Flag | Description |
 |------|-------------|
-| `--page-size <n>` | Number of rows per API page |
 | `--page-token <token>` | Resume from a Google `nextPageToken` |
 | `--all` | Automatically follow all pages |
 | `--max-items <n>` | Stop after collecting N total rows |
+
+Google `search` uses fixed-size result pages from the API. Use `--page-token` to resume, `--all` to follow every page, or `--max-items` to stop early.
 
 ### TikTok (page-number)
 

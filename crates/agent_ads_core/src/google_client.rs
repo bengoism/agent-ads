@@ -126,7 +126,6 @@ impl GoogleClient {
         &self,
         customer_id: &str,
         query: &str,
-        page_size: Option<u32>,
         page_token: Option<&str>,
         max_items: Option<usize>,
     ) -> GoogleResult<GoogleResponse> {
@@ -134,7 +133,6 @@ impl GoogleClient {
             .search_page(
                 customer_id,
                 query,
-                page_size,
                 page_token.filter(|value| !value.is_empty()),
             )
             .await?;
@@ -156,7 +154,6 @@ impl GoogleClient {
         &self,
         customer_id: &str,
         query: &str,
-        page_size: Option<u32>,
         page_token: Option<&str>,
         max_items: Option<usize>,
     ) -> GoogleResult<GoogleResponse> {
@@ -167,7 +164,7 @@ impl GoogleClient {
             .map(str::to_string);
         let (last_request_id, paging) = loop {
             let page = self
-                .search_page(customer_id, query, page_size, next_page_token.as_deref())
+                .search_page(customer_id, query, next_page_token.as_deref())
                 .await?;
             let request_id = page.request_id.clone();
             let page_paging = page
@@ -246,15 +243,11 @@ impl GoogleClient {
         &self,
         customer_id: &str,
         query: &str,
-        page_size: Option<u32>,
         page_token: Option<&str>,
     ) -> GoogleResult<SearchPage> {
         let path = format!("customers/{customer_id}/googleAds:search");
         let mut body = Map::new();
         body.insert("query".to_string(), Value::String(query.to_string()));
-        if let Some(page_size) = page_size {
-            body.insert("pageSize".to_string(), json!(page_size));
-        }
         if let Some(page_token) = page_token {
             body.insert(
                 "pageToken".to_string(),
@@ -414,8 +407,7 @@ mod tests {
             .and(header("Authorization", "Bearer access-token"))
             .and(header("login-customer-id", "1112223333"))
             .and(body_partial_json(json!({
-                "query": "SELECT campaign.id FROM campaign",
-                "pageSize": 1
+                "query": "SELECT campaign.id FROM campaign"
             })))
             .respond_with(
                 ResponseTemplate::new(200)
@@ -438,13 +430,7 @@ mod tests {
         )
         .unwrap();
         let response = client
-            .search(
-                "1234567890",
-                "SELECT campaign.id FROM campaign",
-                Some(1),
-                None,
-                None,
-            )
+            .search("1234567890", "SELECT campaign.id FROM campaign", None, None)
             .await
             .unwrap();
 
@@ -496,13 +482,7 @@ mod tests {
         )
         .unwrap();
         let response = client
-            .search_all(
-                "1234567890",
-                "SELECT campaign.id FROM campaign",
-                None,
-                None,
-                None,
-            )
+            .search_all("1234567890", "SELECT campaign.id FROM campaign", None, None)
             .await
             .unwrap();
 
@@ -576,13 +556,7 @@ mod tests {
         )
         .unwrap();
         let error = client
-            .search(
-                "1234567890",
-                "SELECT campaign.id FROM campaign",
-                None,
-                None,
-                None,
-            )
+            .search("1234567890", "SELECT campaign.id FROM campaign", None, None)
             .await
             .unwrap_err();
 

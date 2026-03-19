@@ -133,10 +133,11 @@ Pagination differs by provider. Both support `--all` and `--max-items`.
 
 | Flag | What it does |
 |------|-------------|
-| `--page-size <n>` | Rows per API page |
 | `--page-token <token>` | Resume from a Google `nextPageToken` |
 | `--all` | Auto-follow all pages |
 | `--max-items <n>` | Stop after N rows |
+
+Google `search` uses fixed-size API pages. Use `--page-token` to resume or `--all` to follow every page.
 
 ## Output
 

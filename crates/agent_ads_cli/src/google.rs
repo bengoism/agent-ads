@@ -166,8 +166,6 @@ pub enum ConfigCommand {
 
 #[derive(Args, Debug, Clone, Default)]
 pub struct GooglePaginationArgs {
-    #[arg(long = "page-size", help = "Rows per API page")]
-    pub page_size: Option<u32>,
     #[arg(long = "page-token", help = "Resume from a Google nextPageToken")]
     pub page_token: Option<String>,
     #[arg(long, help = "Auto-follow all available pages")]
@@ -575,7 +573,8 @@ pub async fn dispatch_google_with_client(
                     "customer_client",
                     &fields,
                     &[],
-                    Some("customer_client.level, customer_client.id"),
+                    order_by_clause(&fields, &["customer_client.level", "customer_client.id"])
+                        .as_deref(),
                 );
                 execute_paged_google_query(
                     client,
@@ -599,7 +598,12 @@ pub async fn dispatch_google_with_client(
                         escape_gaql_string(&status.trim().to_uppercase())
                     ));
                 }
-                let query = build_select_query("campaign", &fields, &filters, Some("campaign.id"));
+                let query = build_select_query(
+                    "campaign",
+                    &fields,
+                    &filters,
+                    order_by_clause(&fields, &["campaign.id"]).as_deref(),
+                );
                 execute_paged_google_query(
                     client,
                     &customer_id,
@@ -628,7 +632,12 @@ pub async fn dispatch_google_with_client(
                         escape_gaql_string(&status.trim().to_uppercase())
                     ));
                 }
-                let query = build_select_query("ad_group", &fields, &filters, Some("ad_group.id"));
+                let query = build_select_query(
+                    "ad_group",
+                    &fields,
+                    &filters,
+                    order_by_clause(&fields, &["ad_group.id"]).as_deref(),
+                );
                 execute_paged_google_query(
                     client,
                     &customer_id,
@@ -663,8 +672,12 @@ pub async fn dispatch_google_with_client(
                         escape_gaql_string(&status.trim().to_uppercase())
                     ));
                 }
-                let query =
-                    build_select_query("ad_group_ad", &fields, &filters, Some("ad_group_ad.ad.id"));
+                let query = build_select_query(
+                    "ad_group_ad",
+                    &fields,
+                    &filters,
+                    order_by_clause(&fields, &["ad_group_ad.ad.id"]).as_deref(),
+                );
                 execute_paged_google_query(
                     client,
                     &customer_id,
@@ -758,7 +771,6 @@ async fn execute_paged_google_query(
             .search_all(
                 customer_id,
                 query,
-                pagination.page_size,
                 pagination.page_token.as_deref(),
                 pagination.max_items,
             )
@@ -768,7 +780,6 @@ async fn execute_paged_google_query(
             .search(
                 customer_id,
                 query,
-                pagination.page_size,
                 pagination.page_token.as_deref(),
                 pagination.max_items,
             )
@@ -849,6 +860,16 @@ fn build_select_query(
         query.push_str(order_by);
     }
     query
+}
+
+fn order_by_clause(fields: &[String], order_fields: &[&str]) -> Option<String> {
+    let supports_ordering = order_fields.iter().all(|order_field| {
+        fields
+            .iter()
+            .any(|field| field.trim().eq_ignore_ascii_case(order_field))
+    });
+
+    supports_ordering.then(|| order_fields.join(", "))
 }
 
 fn escape_gaql_string(value: &str) -> String {
@@ -1060,7 +1081,7 @@ fn google_linux_secure_storage_hint() -> &'static str {
 mod tests {
     use serde_json::json;
 
-    use super::{google_auth_status_payload, parse_google_auth_inputs_from_stdin};
+    use super::{google_auth_status_payload, order_by_clause, parse_google_auth_inputs_from_stdin};
     use agent_ads_core::google_config::{
         GoogleAuthSnapshot, GoogleSecretSource, GoogleSecretStatus,
     };
@@ -1122,6 +1143,21 @@ mod tests {
         assert_eq!(
             payload["credentials"]["refresh_token"]["source"],
             json!("missing")
+        );
+    }
+
+    #[test]
+    fn order_by_clause_requires_selected_fields() {
+        let fields = vec!["campaign.name".to_string()];
+        assert_eq!(order_by_clause(&fields, &["campaign.id"]), None);
+    }
+
+    #[test]
+    fn order_by_clause_keeps_supported_fields() {
+        let fields = vec!["campaign.id".to_string(), "campaign.name".to_string()];
+        assert_eq!(
+            order_by_clause(&fields, &["campaign.id"]).as_deref(),
+            Some("campaign.id")
         );
     }
 }

@@ -47,10 +47,11 @@ Google uses page-token pagination:
 
 | Flag | Meaning |
 |------|---------|
-| `--page-size <n>` | Rows per request |
 | `--page-token <token>` | Resume from `nextPageToken` |
 | `--all` | Follow all pages |
 | `--max-items <n>` | Stop after N rows |
+
+Google `search` returns fixed-size API pages, so there is no page-size override.
 
 `gaql search-stream` does not use page tokens; use `--max-items` if needed.
 
