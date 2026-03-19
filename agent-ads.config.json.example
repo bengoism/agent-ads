@@ -15,6 +15,12 @@
       "default_customer_id": "1234567890",
       "login_customer_id": "1112223333"
     },
-    "tiktok": {}
+    "tiktok": {},
+    "pinterest": {
+      "api_base_url": "https://api.pinterest.com",
+      "api_version": "v5",
+      "timeout_seconds": 60,
+      "default_ad_account_id": "1234567890"
+    }
   }
 }

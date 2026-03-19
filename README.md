@@ -2,7 +2,7 @@
 
 CLI for querying ad platform APIs.
 
-Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram), Google Ads, and TikTok supported today, read-only.
+Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram), Google Ads, TikTok, and Pinterest supported today, read-only.
 
 ## Install
 
@@ -210,6 +210,80 @@ agent-ads tiktok insights query \
   --output report.csv
 ```
 
+## Quick Start (Pinterest)
+
+### 1. Authenticate
+
+Pinterest requires an app ID, app secret, access token, and refresh token. Store them once in your OS credential store:
+
+```bash
+agent-ads pinterest auth set
+```
+
+Or set shell variables for the current process:
+
+```bash
+export PINTEREST_ADS_APP_ID=your_app_id
+export PINTEREST_ADS_APP_SECRET=your_app_secret
+export PINTEREST_ADS_ACCESS_TOKEN=access-token
+export PINTEREST_ADS_REFRESH_TOKEN=refresh-token
+```
+
+Refresh with:
+
+```bash
+agent-ads pinterest auth refresh
+```
+
+### 2. Verify your setup
+
+```bash
+agent-ads pinterest doctor
+```
+
+Add `--api` to also exchange the refresh token and ping the Pinterest Ads API.
+
+### 3. Discover your ad accounts
+
+```bash
+agent-ads pinterest ad-accounts list
+```
+
+### 4. Explore campaigns
+
+```bash
+agent-ads pinterest campaigns list --ad-account-id 1234567890
+```
+
+### 5. Pull a synchronous analytics report
+
+```bash
+agent-ads pinterest analytics query \
+  --ad-account-id 1234567890 \
+  --level campaign \
+  --start-date 2026-03-01 \
+  --end-date 2026-03-16 \
+  --columns IMPRESSION_1,CLICKTHROUGH_1,SPEND_IN_DOLLAR \
+  --granularity DAY \
+  --campaign-id 987654321
+```
+
+### 6. Submit and wait for an async report
+
+```bash
+agent-ads pinterest report-runs submit \
+  --ad-account-id 1234567890 \
+  --level CAMPAIGN \
+  --start-date 2026-03-01 \
+  --end-date 2026-03-16 \
+  --granularity DAY \
+  --columns IMPRESSION_1,CLICKTHROUGH_1,SPEND_IN_DOLLAR
+
+agent-ads pinterest report-runs wait \
+  --ad-account-id 1234567890 \
+  --token report-token
+```
+
 ## Quick Start (Google)
 
 ### 1. Authenticate
@@ -287,6 +361,7 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 | `agent-ads meta ...` | Meta Marketing API commands |
 | `agent-ads google ...` | Google Ads commands |
 | `agent-ads tiktok ...` | TikTok Business API commands |
+| `agent-ads pinterest ...` | Pinterest Ads API commands |
 
 ### Meta: Discovery
 
@@ -403,6 +478,41 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 | `tiktok config validate` | Validate config file |
 | `tiktok doctor` | Verify auth, config, and (optionally) API connectivity |
 
+### Pinterest: Discovery & Objects
+
+| Command | Description |
+|---------|-------------|
+| `pinterest ad-accounts list` | List ad accounts accessible to your credentials |
+| `pinterest ad-accounts get` | Get ad account details |
+| `pinterest campaigns list` | List campaigns for an ad account |
+| `pinterest adgroups list` | List ad groups for an ad account |
+| `pinterest ads list` | List ads for an ad account |
+| `pinterest audiences list` | List audiences for an ad account |
+| `pinterest audiences get` | Get a single audience |
+
+### Pinterest: Reporting & Analytics
+
+| Command | Description |
+|---------|-------------|
+| `pinterest analytics query` | Run synchronous analytics queries |
+| `pinterest targeting-analytics query` | Break down performance by targeting dimension |
+| `pinterest report-runs submit` | Submit an async report request |
+| `pinterest report-runs status` | Check async report status |
+| `pinterest report-runs wait` | Poll until async report completes |
+
+### Pinterest: Config & Diagnostics
+
+| Command | Description |
+|---------|-------------|
+| `pinterest auth set` | Store Pinterest credentials in the OS credential store |
+| `pinterest auth status` | Show auth source and secure storage status |
+| `pinterest auth delete` | Delete stored Pinterest credentials |
+| `pinterest auth refresh` | Refresh the Pinterest access token |
+| `pinterest config path` | Show resolved config file path |
+| `pinterest config show` | Show full resolved configuration |
+| `pinterest config validate` | Validate config file |
+| `pinterest doctor` | Verify auth, config, and (optionally) API connectivity |
+
 ## Configuration
 
 ### Secrets
@@ -442,12 +552,18 @@ Create a config file to set defaults and avoid repeating flags:
       "api_version": "v1.3",
       "timeout_seconds": 60,
       "default_advertiser_id": "1234567890"
+    },
+    "pinterest": {
+      "api_base_url": "https://api.pinterest.com",
+      "api_version": "v5",
+      "timeout_seconds": 60,
+      "default_ad_account_id": "1234567890"
     }
   }
 }
 ```
 
-Setting `default_account_id` (Meta), `default_customer_id` (Google), or `default_advertiser_id` (TikTok) lets you omit those flags from commands.
+Setting `default_account_id` (Meta), `default_customer_id` (Google), `default_advertiser_id` (TikTok), or `default_ad_account_id` (Pinterest) lets you omit those flags from commands.
 
 ## Output
 
@@ -470,6 +586,7 @@ Pagination differs by provider (`--all` auto-follows all pages for every provide
 | 3 | Meta API error |
 | 4 | TikTok API error |
 | 5 | Google API error |
+| 6 | Pinterest API error |
 
 ## Docs Map
 
@@ -480,8 +597,9 @@ Pagination differs by provider (`--all` auto-follows all pages for every provide
 | Meta provider deep-dive | [skills/agent-ads/references/meta.md](skills/agent-ads/references/meta.md) |
 | Google provider deep-dive | [skills/agent-ads/references/google.md](skills/agent-ads/references/google.md) |
 | TikTok provider deep-dive | [skills/agent-ads/references/tiktok.md](skills/agent-ads/references/tiktok.md) |
+| Pinterest provider deep-dive | [skills/agent-ads/references/pinterest.md](skills/agent-ads/references/pinterest.md) |
 | Full CLI reference (generated) | [docs/command-topics.md](docs/command-topics.md) |
-| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads google --help`, `agent-ads tiktok --help` |
+| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads google --help`, `agent-ads tiktok --help`, `agent-ads pinterest --help` |
 
 ## Skills
 

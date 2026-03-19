@@ -1,5 +1,6 @@
 mod google;
 mod meta;
+mod pinterest;
 mod tiktok;
 
 use std::env;
@@ -15,11 +16,14 @@ use agent_ads_core::google_error::{GoogleApiError, GoogleError};
 use agent_ads_core::output::{
     render_output, OutputEnvelope, OutputFormat, OutputMeta, RenderOptions,
 };
+use agent_ads_core::pinterest_config::PinterestConfigOverrides;
+use agent_ads_core::pinterest_error::{PinterestApiError, PinterestError};
 use agent_ads_core::tiktok_config::TikTokConfigOverrides;
 use agent_ads_core::tiktok_error::{TikTokApiError, TikTokError};
 use agent_ads_core::{
-    google_inspect, tiktok_inspect, GoogleClient, GoogleResolvedConfig, GraphClient,
-    OsKeyringStore, TikTokClient, TikTokResolvedConfig,
+    google_inspect, pinterest_inspect, tiktok_inspect, GoogleClient, GoogleResolvedConfig,
+    GraphClient, OsKeyringStore, PinterestClient, PinterestResolvedConfig, TikTokClient,
+    TikTokResolvedConfig,
 };
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use serde_json::{json, Value};
@@ -27,6 +31,7 @@ use tracing_subscriber::EnvFilter;
 
 use google::GoogleCommand;
 use meta::MetaCommand;
+use pinterest::PinterestCommand;
 use tiktok::TikTokCommand;
 
 const TIKTOK_REFRESH_TOKEN_ENV_VAR: &str = "TIKTOK_ADS_REFRESH_TOKEN";
@@ -136,6 +141,11 @@ enum Command {
         #[command(subcommand)]
         command: TikTokCommand,
     },
+    #[command(about = "Pinterest Ads API commands")]
+    Pinterest {
+        #[command(subcommand)]
+        command: PinterestCommand,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -202,9 +212,63 @@ async fn main() -> ExitCode {
         output_format: cli.format.map(Into::into),
         ..GoogleConfigOverrides::default()
     };
+    let pinterest_overrides = PinterestConfigOverrides {
+        api_base_url: cli.api_base_url.clone(),
+        api_version: cli.api_version.clone(),
+        timeout_seconds: cli.timeout_seconds,
+        output_format: cli.format.map(Into::into),
+        ..PinterestConfigOverrides::default()
+    };
 
     let result = match cli.command {
         Command::Providers { command } => Ok(handle_providers(command)),
+        Command::Pinterest { command } => {
+            if cli.format.is_none() {
+                output_options.format = match resolve_pinterest_output_format(
+                    cli.config.as_deref(),
+                    &secret_store,
+                    &pinterest_overrides,
+                ) {
+                    Ok(format) => format,
+                    Err(error) => {
+                        let payload = pinterest_error_payload(&error);
+                        let rendered = if output_options.pretty {
+                            serde_json::to_string_pretty(&payload)
+                        } else {
+                            serde_json::to_string(&payload)
+                        }
+                        .unwrap_or_else(|_| {
+                            "{\"error\":{\"message\":\"failed to serialize error\"}}".to_string()
+                        });
+                        eprintln!("{rendered}");
+                        return ExitCode::from(error.exit_code() as u8);
+                    }
+                };
+            }
+            let pinterest_result = dispatch_pinterest(
+                command,
+                &secret_store,
+                cli.config.as_deref(),
+                &pinterest_overrides,
+            )
+            .await;
+            match pinterest_result {
+                Ok(result) => Ok(result),
+                Err(pinterest_err) => {
+                    let payload = pinterest_error_payload(&pinterest_err);
+                    let rendered = if output_options.pretty {
+                        serde_json::to_string_pretty(&payload)
+                    } else {
+                        serde_json::to_string(&payload)
+                    }
+                    .unwrap_or_else(|_| {
+                        "{\"error\":{\"message\":\"failed to serialize error\"}}".to_string()
+                    });
+                    eprintln!("{rendered}");
+                    return ExitCode::from(pinterest_err.exit_code() as u8);
+                }
+            }
+        }
         Command::Google { command } => {
             if cli.format.is_none() {
                 output_options.format = match resolve_google_output_format(
@@ -428,6 +492,36 @@ async fn dispatch_google(
     }
 }
 
+async fn dispatch_pinterest(
+    command: PinterestCommand,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    config_path: Option<&Path>,
+    overrides: &PinterestConfigOverrides,
+) -> Result<CommandResult, PinterestError> {
+    match command {
+        PinterestCommand::Auth { command } => match command {
+            pinterest::AuthCommand::Refresh => {
+                let snapshot = pinterest_inspect(config_path, secret_store, overrides)?;
+                pinterest::handle_auth_refresh(secret_store, &snapshot).await
+            }
+            _ => pinterest::handle_auth(command, secret_store),
+        },
+        PinterestCommand::Config { command } => {
+            let snapshot = pinterest_inspect(config_path, secret_store, overrides)?;
+            pinterest::handle_config(command, snapshot)
+        }
+        PinterestCommand::Doctor(args) => {
+            let snapshot = pinterest_inspect(config_path, secret_store, overrides)?;
+            pinterest::handle_doctor(args, config_path, secret_store, overrides, snapshot).await
+        }
+        command => {
+            let config = PinterestResolvedConfig::load(config_path, secret_store, overrides)?;
+            let client = PinterestClient::from_config(&config)?;
+            pinterest::dispatch_pinterest_with_client(&client, &config, command).await
+        }
+    }
+}
+
 fn resolve_meta_output_format(
     config_path: Option<&Path>,
     secret_store: &dyn agent_ads_core::SecretStore,
@@ -442,6 +536,14 @@ fn resolve_google_output_format(
     overrides: &GoogleConfigOverrides,
 ) -> Result<OutputFormat, GoogleError> {
     google_inspect(config_path, secret_store, overrides).map(|snapshot| snapshot.output_format)
+}
+
+fn resolve_pinterest_output_format(
+    config_path: Option<&Path>,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    overrides: &PinterestConfigOverrides,
+) -> Result<OutputFormat, PinterestError> {
+    pinterest_inspect(config_path, secret_store, overrides).map(|snapshot| snapshot.output_format)
 }
 
 fn resolve_tiktok_output_format(
@@ -505,6 +607,33 @@ fn google_error_payload(error: &GoogleError) -> Value {
     }
 }
 
+fn pinterest_error_payload(error: &PinterestError) -> Value {
+    match error {
+        PinterestError::Api(PinterestApiError {
+            code,
+            message,
+            http_status,
+            request_id,
+        }) => json!({
+            "error": {
+                "kind": "api",
+                "provider": "pinterest",
+                "message": message,
+                "code": code,
+                "status": http_status,
+                "request_id": request_id,
+            }
+        }),
+        _ => json!({
+            "error": {
+                "kind": "internal",
+                "provider": "pinterest",
+                "message": error.to_string()
+            }
+        }),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Providers
 // ---------------------------------------------------------------------------
@@ -530,6 +659,12 @@ fn handle_providers(command: ProvidersCommand) -> CommandResult {
                     "implemented": true,
                     "status": "available",
                     "summary": "Read-only TikTok Business API support."
+                },
+                {
+                    "provider": "pinterest",
+                    "implemented": true,
+                    "status": "available",
+                    "summary": "Read-only Pinterest Ads API support."
                 }
             ]),
             "/providers",
@@ -737,13 +872,14 @@ mod tests {
 
     use agent_ads_core::google_config::GoogleConfigOverrides;
     use agent_ads_core::output::OutputFormat;
+    use agent_ads_core::pinterest_config::PinterestConfigOverrides;
     use agent_ads_core::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
     use clap::{Command, CommandFactory, Parser};
     use tempfile::tempdir;
 
     use super::{
-        resolve_google_output_format, resolve_tiktok_refresh_token, Cli,
-        TIKTOK_REFRESH_TOKEN_ENV_VAR,
+        resolve_google_output_format, resolve_pinterest_output_format,
+        resolve_tiktok_refresh_token, Cli, TIKTOK_REFRESH_TOKEN_ENV_VAR,
     };
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -856,6 +992,7 @@ mod tests {
         assert!(help.contains("meta"));
         assert!(help.contains("google"));
         assert!(help.contains("tiktok"));
+        assert!(help.contains("pinterest"));
     }
 
     #[test]
@@ -1306,5 +1443,133 @@ mod tests {
                 .unwrap();
 
         assert_eq!(format, OutputFormat::Csv);
+    }
+
+    // -----------------------------------------------------------------------
+    // Pinterest CLI tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn pinterest_help_lists_command_topics() {
+        let help = nested_help(&["pinterest"]);
+        assert!(help.contains("ad-accounts"));
+        assert!(help.contains("campaigns"));
+        assert!(help.contains("adgroups"));
+        assert!(help.contains("ads"));
+        assert!(help.contains("analytics"));
+        assert!(help.contains("report-runs"));
+        assert!(help.contains("audiences"));
+        assert!(help.contains("targeting-analytics"));
+        assert!(help.contains("auth"));
+        assert!(help.contains("doctor"));
+        assert!(help.contains("config"));
+    }
+
+    #[test]
+    fn pinterest_analytics_query_parses() {
+        let cli = Cli::try_parse_from([
+            "agent-ads",
+            "pinterest",
+            "analytics",
+            "query",
+            "--ad-account-id",
+            "123",
+            "--level",
+            "campaign",
+            "--start-date",
+            "2026-03-01",
+            "--end-date",
+            "2026-03-07",
+            "--columns",
+            "IMPRESSION_1,SPEND_IN_DOLLAR",
+            "--granularity",
+            "DAY",
+            "--campaign-id",
+            "456",
+        ])
+        .unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Pinterest"));
+        assert!(debug.contains("Analytics"));
+    }
+
+    #[test]
+    fn pinterest_auth_set_parses() {
+        let cli =
+            Cli::try_parse_from(["agent-ads", "pinterest", "auth", "set", "--stdin"]).unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Auth"));
+        assert!(debug.contains("Set"));
+    }
+
+    #[test]
+    fn pinterest_report_runs_wait_parses() {
+        let cli = Cli::try_parse_from([
+            "agent-ads",
+            "pinterest",
+            "report-runs",
+            "wait",
+            "--ad-account-id",
+            "123",
+            "--token",
+            "report-token",
+        ])
+        .unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("ReportRuns"));
+        assert!(debug.contains("Wait"));
+    }
+
+    #[test]
+    fn pinterest_targeting_analytics_query_parses() {
+        let cli = Cli::try_parse_from([
+            "agent-ads",
+            "pinterest",
+            "targeting-analytics",
+            "query",
+            "--ad-account-id",
+            "123",
+            "--level",
+            "ad_group",
+            "--start-date",
+            "2026-03-01",
+            "--end-date",
+            "2026-03-07",
+            "--targeting-type",
+            "AGE_BUCKET",
+            "--columns",
+            "SPEND_IN_DOLLAR",
+            "--granularity",
+            "DAY",
+            "--ad-group-id",
+            "789",
+        ])
+        .unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("TargetingAnalytics"));
+    }
+
+    #[test]
+    fn pinterest_output_format_uses_provider_config() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var("PINTEREST_ADS_OUTPUT_FORMAT");
+
+        let store = FakeSecretStore::default();
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("agent-ads.config.json");
+        fs::write(
+            &path,
+            r#"{"providers":{"pinterest":{"output_format":"jsonl"}}}"#,
+        )
+        .unwrap();
+
+        let format = resolve_pinterest_output_format(
+            Some(&path),
+            &store,
+            &PinterestConfigOverrides::default(),
+        )
+        .unwrap();
+
+        assert_eq!(format, OutputFormat::Jsonl);
     }
 }
