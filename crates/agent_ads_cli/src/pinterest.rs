@@ -14,8 +14,8 @@ use agent_ads_core::pinterest_endpoints::{
 };
 use agent_ads_core::secret_store::SecretStore;
 use agent_ads_core::{
-    pinterest_refresh_access_token, PinterestClient, PinterestError, PinterestResponse,
-    PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT, PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
+    pinterest_refresh_access_token, PinterestClient, PinterestError, PinterestRefreshResult,
+    PinterestResponse, PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT, PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
     PINTEREST_ADS_APP_ID_ACCOUNT, PINTEREST_ADS_APP_ID_SERVICE, PINTEREST_ADS_APP_SECRET_ACCOUNT,
     PINTEREST_ADS_APP_SECRET_SERVICE, PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
     PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
@@ -654,32 +654,7 @@ pub async fn handle_auth_refresh(
     secret_store: &dyn SecretStore,
     snapshot: &PinterestConfigSnapshot,
 ) -> Result<CommandResult, PinterestError> {
-    let auth = resolve_pinterest_refresh_auth(secret_store)?;
-    let refresh = pinterest_refresh_access_token(
-        snapshot.timeout_seconds,
-        &auth.app_id,
-        &auth.app_secret,
-        &auth.refresh_token,
-    )
-    .await?;
-
-    secret_store
-        .set_secret(
-            PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
-            PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
-            &refresh.access_token,
-        )
-        .map_err(|error| pinterest_auth_storage_error("store refreshed access token", &error))?;
-
-    if let Some(new_refresh_token) = &refresh.refresh_token {
-        secret_store
-            .set_secret(
-                PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
-                PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
-                new_refresh_token,
-            )
-            .map_err(|error| pinterest_auth_storage_error("store new refresh token", &error))?;
-    }
+    let refresh = refresh_pinterest_tokens(secret_store, snapshot).await?;
 
     Ok(command_result(
         json!({
@@ -734,6 +709,87 @@ pub async fn handle_doctor(
     overrides: &PinterestConfigOverrides,
     snapshot: PinterestConfigSnapshot,
 ) -> Result<CommandResult, PinterestError> {
+    let mut snapshot = snapshot;
+    let mut ok = snapshot.auth.access_token.present;
+    let mut api_check = None;
+
+    if args.api {
+        if required_pinterest_refresh_credentials_present(&snapshot.auth) {
+            match refresh_pinterest_tokens(secret_store, &snapshot).await {
+                Ok(refresh) => {
+                    snapshot =
+                        agent_ads_core::pinterest_inspect(config_path, secret_store, overrides)?;
+                    ok = snapshot.auth.access_token.present;
+
+                    match PinterestClient::from_access_token(
+                        &snapshot.api_base_url,
+                        &snapshot.api_version,
+                        snapshot.timeout_seconds,
+                        &refresh.access_token,
+                    ) {
+                        Ok(client) => match accounts::list_ad_accounts(
+                            &client,
+                            None,
+                            None,
+                            Some(1),
+                            false,
+                            Some(1),
+                        )
+                        .await
+                        {
+                            Ok(response) => {
+                                let count = response
+                                    .data
+                                    .as_array()
+                                    .map(|items| items.len())
+                                    .unwrap_or(0);
+                                api_check = Some(json!({
+                                    "name": "api_ping",
+                                    "ok": true,
+                                    "detail": format!(
+                                        "refresh credentials accepted by Pinterest Ads API; sampled {} ad account record(s)",
+                                        count
+                                    )
+                                }));
+                            }
+                            Err(error) => {
+                                ok = false;
+                                api_check = Some(json!({
+                                    "name": "api_ping",
+                                    "ok": false,
+                                    "detail": error.to_string()
+                                }));
+                            }
+                        },
+                        Err(error) => {
+                            ok = false;
+                            api_check = Some(json!({
+                                "name": "api_ping",
+                                "ok": false,
+                                "detail": error.to_string()
+                            }));
+                        }
+                    }
+                }
+                Err(error) => {
+                    ok = false;
+                    api_check = Some(json!({
+                        "name": "api_ping",
+                        "ok": false,
+                        "detail": error.to_string()
+                    }));
+                }
+            }
+        } else {
+            ok = false;
+            api_check = Some(json!({
+                "name": "api_ping",
+                "ok": false,
+                "detail": "skipped because Pinterest app credentials or refresh token are missing"
+            }));
+        }
+    }
+
     let mut checks = vec![
         json!({
             "name": "credential_store",
@@ -771,71 +827,8 @@ pub async fn handle_doctor(
         }),
     ];
 
-    let mut ok = required_pinterest_credentials_present(&snapshot.auth);
-    if args.api {
-        if ok {
-            match PinterestResolvedConfig::load(config_path, secret_store, overrides) {
-                Ok(config) => match PinterestClient::from_config(&config).await {
-                    Ok(client) => match accounts::list_ad_accounts(
-                        &client,
-                        None,
-                        None,
-                        Some(1),
-                        false,
-                        Some(1),
-                    )
-                    .await
-                    {
-                        Ok(response) => {
-                            let count = response
-                                .data
-                                .as_array()
-                                .map(|items| items.len())
-                                .unwrap_or(0);
-                            checks.push(json!({
-                                "name": "api_ping",
-                                "ok": true,
-                                "detail": format!(
-                                    "credentials accepted by Pinterest Ads API; sampled {} ad account record(s)",
-                                    count
-                                )
-                            }));
-                        }
-                        Err(error) => {
-                            ok = false;
-                            checks.push(json!({
-                                "name": "api_ping",
-                                "ok": false,
-                                "detail": error.to_string()
-                            }));
-                        }
-                    },
-                    Err(error) => {
-                        ok = false;
-                        checks.push(json!({
-                            "name": "api_ping",
-                            "ok": false,
-                            "detail": error.to_string()
-                        }));
-                    }
-                },
-                Err(error) => {
-                    ok = false;
-                    checks.push(json!({
-                        "name": "api_ping",
-                        "ok": false,
-                        "detail": error.to_string()
-                    }));
-                }
-            }
-        } else {
-            ok = false;
-            checks.push(json!({
-                "name": "api_ping",
-                "ok": false,
-                "detail": "skipped because required Pinterest credentials are missing"
-            }));
-        }
+    if let Some(api_check) = api_check {
+        checks.push(api_check);
     }
 
     Ok(pinterest_command_result(
@@ -1341,6 +1334,49 @@ async fn wait_for_report(
     }
 }
 
+async fn refresh_pinterest_tokens(
+    secret_store: &dyn SecretStore,
+    snapshot: &PinterestConfigSnapshot,
+) -> Result<PinterestRefreshResult, PinterestError> {
+    let auth = resolve_pinterest_refresh_auth(secret_store)?;
+    let refresh = pinterest_refresh_access_token(
+        snapshot.timeout_seconds,
+        &auth.app_id,
+        &auth.app_secret,
+        &auth.refresh_token,
+    )
+    .await?;
+
+    persist_pinterest_refresh(secret_store, &refresh)?;
+
+    Ok(refresh)
+}
+
+fn persist_pinterest_refresh(
+    secret_store: &dyn SecretStore,
+    refresh: &PinterestRefreshResult,
+) -> Result<(), PinterestError> {
+    secret_store
+        .set_secret(
+            PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
+            PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
+            &refresh.access_token,
+        )
+        .map_err(|error| pinterest_auth_storage_error("store refreshed access token", &error))?;
+
+    if let Some(new_refresh_token) = &refresh.refresh_token {
+        secret_store
+            .set_secret(
+                PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
+                PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
+                new_refresh_token,
+            )
+            .map_err(|error| pinterest_auth_storage_error("store new refresh token", &error))?;
+    }
+
+    Ok(())
+}
+
 fn resolve_report_request(args: &ReportSubmitArgs) -> Result<Value, PinterestError> {
     let mut body = match read_optional_json_input(
         args.request_input.request_json.as_deref(),
@@ -1589,11 +1625,8 @@ fn resolve_secret_value(
     }
 }
 
-fn required_pinterest_credentials_present(auth: &PinterestAuthSnapshot) -> bool {
-    auth.app_id.present
-        && auth.app_secret.present
-        && auth.access_token.present
-        && auth.refresh_token.present
+fn required_pinterest_refresh_credentials_present(auth: &PinterestAuthSnapshot) -> bool {
+    auth.app_id.present && auth.app_secret.present && auth.refresh_token.present
 }
 
 fn pinterest_credential_store_check_ok(snapshot: &PinterestConfigSnapshot) -> bool {

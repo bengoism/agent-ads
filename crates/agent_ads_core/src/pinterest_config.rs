@@ -47,10 +47,7 @@ pub struct PinterestConfigOverrides {
 
 #[derive(Debug, Clone)]
 pub struct PinterestResolvedConfig {
-    pub app_id: String,
-    pub app_secret: String,
     pub access_token: String,
-    pub refresh_token: String,
     pub api_base_url: String,
     pub api_version: String,
     pub timeout_seconds: u64,
@@ -145,28 +142,13 @@ impl PinterestResolvedConfig {
         let snapshot =
             pinterest_inspect_with_auth(config_path, &auth_resolution.snapshot(), overrides)?;
 
-        let app_id = auth_resolution
-            .app_id
-            .value
-            .ok_or_else(|| missing_pinterest_credentials_error(&snapshot.auth))?;
-        let app_secret = auth_resolution
-            .app_secret
-            .value
-            .ok_or_else(|| missing_pinterest_credentials_error(&snapshot.auth))?;
         let access_token = auth_resolution
             .access_token
             .value
-            .ok_or_else(|| missing_pinterest_credentials_error(&snapshot.auth))?;
-        let refresh_token = auth_resolution
-            .refresh_token
-            .value
-            .ok_or_else(|| missing_pinterest_credentials_error(&snapshot.auth))?;
+            .ok_or_else(|| missing_pinterest_access_token_error(&snapshot.auth))?;
 
         Ok(Self {
-            app_id,
-            app_secret,
             access_token,
-            refresh_token,
             api_base_url: snapshot.api_base_url,
             api_version: snapshot.api_version,
             timeout_seconds: snapshot.timeout_seconds,
@@ -336,21 +318,21 @@ fn resolve_secret(
     }
 }
 
-fn missing_pinterest_credentials_error(auth: &PinterestAuthSnapshot) -> PinterestError {
-    let guidance = pinterest_credentials_guidance();
+fn missing_pinterest_access_token_error(auth: &PinterestAuthSnapshot) -> PinterestError {
+    let guidance = pinterest_access_token_guidance();
     match auth.credential_store_error.as_deref() {
         Some(detail) => PinterestError::Config(format!(
-            "Pinterest credentials are incomplete and the OS credential store could not be read: {detail}. {guidance}"
+            "Pinterest access token is missing and the OS credential store could not be read: {detail}. {guidance}"
         )),
         None => PinterestError::Config(format!(
-            "Pinterest credentials are incomplete. {guidance}"
+            "Pinterest access token is missing. {guidance}"
         )),
     }
 }
 
-fn pinterest_credentials_guidance() -> String {
+fn pinterest_access_token_guidance() -> String {
     let mut message = format!(
-        "Set {PINTEREST_ADS_APP_ID_ENV_VAR}, {PINTEREST_ADS_APP_SECRET_ENV_VAR}, {PINTEREST_ADS_ACCESS_TOKEN_ENV_VAR}, and {PINTEREST_ADS_REFRESH_TOKEN_ENV_VAR} in the shell or run `agent-ads pinterest auth set` to store them in your OS credential store."
+        "Set {PINTEREST_ADS_ACCESS_TOKEN_ENV_VAR} in the shell or run `agent-ads pinterest auth set` to store it in your OS credential store."
     );
     if cfg!(target_os = "linux") {
         message.push_str(
@@ -376,5 +358,169 @@ impl From<crate::error::MetaAdsError> for PinterestError {
             crate::error::MetaAdsError::Csv(error) => Self::Csv(error),
             crate::error::MetaAdsError::Api(error) => Self::Config(error.to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::env;
+    use std::sync::{LazyLock, Mutex};
+
+    use tempfile::tempdir;
+
+    use super::{pinterest_inspect, PinterestConfigOverrides, PinterestResolvedConfig};
+    use crate::output::OutputFormat;
+    use crate::secret_store::{
+        SecretStore, SecretStoreError, SecretStoreErrorKind, PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
+        PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
+    };
+
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    #[derive(Default)]
+    struct FakeSecretStore {
+        secrets: Mutex<HashMap<(String, String), String>>,
+        get_error: Mutex<Option<SecretStoreError>>,
+    }
+
+    impl FakeSecretStore {
+        fn with_access_token(access_token: &str) -> Self {
+            let store = Self::default();
+            store.secrets.lock().unwrap().insert(
+                (
+                    PINTEREST_ADS_ACCESS_TOKEN_SERVICE.to_string(),
+                    PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT.to_string(),
+                ),
+                access_token.to_string(),
+            );
+            store
+        }
+
+        fn set_get_error(&self, error: SecretStoreError) {
+            *self.get_error.lock().unwrap() = Some(error);
+        }
+    }
+
+    impl SecretStore for FakeSecretStore {
+        fn get_secret(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<Option<String>, SecretStoreError> {
+            if let Some(error) = self.get_error.lock().unwrap().clone() {
+                return Err(error);
+            }
+
+            Ok(self
+                .secrets
+                .lock()
+                .unwrap()
+                .get(&(service.to_string(), account.to_string()))
+                .cloned())
+        }
+
+        fn set_secret(
+            &self,
+            service: &str,
+            account: &str,
+            secret: &str,
+        ) -> std::result::Result<(), SecretStoreError> {
+            self.secrets.lock().unwrap().insert(
+                (service.to_string(), account.to_string()),
+                secret.to_string(),
+            );
+            Ok(())
+        }
+
+        fn delete_secret(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> std::result::Result<bool, SecretStoreError> {
+            Ok(self
+                .secrets
+                .lock()
+                .unwrap()
+                .remove(&(service.to_string(), account.to_string()))
+                .is_some())
+        }
+    }
+
+    fn clear_pinterest_env() {
+        for key in [
+            "PINTEREST_ADS_APP_ID",
+            "PINTEREST_ADS_APP_SECRET",
+            "PINTEREST_ADS_ACCESS_TOKEN",
+            "PINTEREST_ADS_REFRESH_TOKEN",
+            "PINTEREST_ADS_API_BASE_URL",
+            "PINTEREST_ADS_API_VERSION",
+            "PINTEREST_ADS_TIMEOUT_SECONDS",
+            "PINTEREST_ADS_DEFAULT_AD_ACCOUNT_ID",
+            "PINTEREST_ADS_OUTPUT_FORMAT",
+        ] {
+            env::remove_var(key);
+        }
+    }
+
+    #[test]
+    fn load_uses_access_token_without_requiring_refresh_credentials() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_pinterest_env();
+
+        let store = FakeSecretStore::with_access_token("keychain-token");
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("agent-ads.config.json");
+        std::fs::write(
+            &path,
+            r#"{"providers":{"pinterest":{"api_version":"v6","output_format":"jsonl"}}}"#,
+        )
+        .unwrap();
+
+        let config = PinterestResolvedConfig::load(
+            Some(&path),
+            &store,
+            &PinterestConfigOverrides::default(),
+        )
+        .unwrap();
+
+        assert_eq!(config.access_token, "keychain-token");
+        assert_eq!(config.api_version, "v6");
+        assert_eq!(config.output_format, OutputFormat::Jsonl);
+    }
+
+    #[test]
+    fn missing_access_token_errors_with_setup_guidance() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_pinterest_env();
+
+        let store = FakeSecretStore::default();
+        let error =
+            PinterestResolvedConfig::load(None, &store, &PinterestConfigOverrides::default())
+                .unwrap_err();
+
+        assert!(error.to_string().contains("PINTEREST_ADS_ACCESS_TOKEN"));
+    }
+
+    #[test]
+    fn inspect_reports_unavailable_store_without_breaking_shell_env_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        clear_pinterest_env();
+
+        env::set_var("PINTEREST_ADS_ACCESS_TOKEN", "shell-token");
+
+        let store = FakeSecretStore::default();
+        store.set_get_error(SecretStoreError::new(
+            SecretStoreErrorKind::Unavailable,
+            "keychain unavailable".to_string(),
+        ));
+
+        let snapshot =
+            pinterest_inspect(None, &store, &PinterestConfigOverrides::default()).unwrap();
+
+        assert!(snapshot.auth.access_token.present);
+        assert_eq!(snapshot.output_format, OutputFormat::Json);
+
+        clear_pinterest_env();
     }
 }

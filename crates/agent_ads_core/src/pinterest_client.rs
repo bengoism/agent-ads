@@ -5,7 +5,6 @@ use serde_json::{json, Value};
 use tokio::time::sleep;
 use tracing::debug;
 
-use crate::pinterest_auth::refresh_access_token;
 use crate::pinterest_config::PinterestResolvedConfig;
 use crate::pinterest_error::{parse_pinterest_api_error, PinterestError, PinterestResult};
 
@@ -26,20 +25,12 @@ pub struct PinterestClient {
 }
 
 impl PinterestClient {
-    pub async fn from_config(config: &PinterestResolvedConfig) -> PinterestResult<Self> {
-        let refresh = refresh_access_token(
-            config.timeout_seconds,
-            &config.app_id,
-            &config.app_secret,
-            &config.refresh_token,
-        )
-        .await?;
-
+    pub fn from_config(config: &PinterestResolvedConfig) -> PinterestResult<Self> {
         Self::from_access_token(
             &config.api_base_url,
             &config.api_version,
             config.timeout_seconds,
-            &refresh.access_token,
+            &config.access_token,
         )
     }
 

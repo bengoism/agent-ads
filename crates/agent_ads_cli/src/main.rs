@@ -516,7 +516,7 @@ async fn dispatch_pinterest(
         }
         command => {
             let config = PinterestResolvedConfig::load(config_path, secret_store, overrides)?;
-            let client = PinterestClient::from_config(&config).await?;
+            let client = PinterestClient::from_config(&config)?;
             pinterest::dispatch_pinterest_with_client(&client, &config, command).await
         }
     }
