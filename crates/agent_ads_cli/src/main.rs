@@ -1,3 +1,4 @@
+mod google;
 mod meta;
 mod tiktok;
 
@@ -9,16 +10,22 @@ use std::process::ExitCode;
 
 use agent_ads_core::config::{inspect, ConfigOverrides, ResolvedConfig};
 use agent_ads_core::error::{GraphApiError, MetaAdsError};
+use agent_ads_core::google_config::GoogleConfigOverrides;
+use agent_ads_core::google_error::{GoogleApiError, GoogleError};
 use agent_ads_core::output::{
     render_output, OutputEnvelope, OutputFormat, OutputMeta, RenderOptions,
 };
 use agent_ads_core::tiktok_config::TikTokConfigOverrides;
 use agent_ads_core::tiktok_error::{TikTokApiError, TikTokError};
-use agent_ads_core::{GraphClient, OsKeyringStore, TikTokClient, TikTokResolvedConfig};
+use agent_ads_core::{
+    google_inspect, GoogleClient, GoogleResolvedConfig, GraphClient, OsKeyringStore, TikTokClient,
+    TikTokResolvedConfig,
+};
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use serde_json::{json, Value};
 use tracing_subscriber::EnvFilter;
 
+use google::GoogleCommand;
 use meta::MetaCommand;
 use tiktok::TikTokCommand;
 
@@ -55,7 +62,11 @@ struct Cli {
     config: Option<PathBuf>,
     #[arg(long, global = true, help = "Override API base URL")]
     api_base_url: Option<String>,
-    #[arg(long, global = true, help = "Override API version (e.g. v25.0)")]
+    #[arg(
+        long,
+        global = true,
+        help = "Override API version (e.g. Meta v25.0 or Google v23)"
+    )]
     api_version: Option<String>,
     #[arg(long, global = true, help = "HTTP request timeout in seconds")]
     timeout_seconds: Option<u64>,
@@ -115,8 +126,11 @@ enum Command {
         #[command(subcommand)]
         command: MetaCommand,
     },
-    #[command(about = "Google Ads provider namespace (not implemented yet)")]
-    Google,
+    #[command(about = "Google Ads commands")]
+    Google {
+        #[command(subcommand)]
+        command: GoogleCommand,
+    },
     #[command(about = "TikTok Business API commands")]
     Tiktok {
         #[command(subcommand)]
@@ -181,10 +195,41 @@ async fn main() -> ExitCode {
         output_format: cli.format.map(Into::into),
         ..TikTokConfigOverrides::default()
     };
+    let google_overrides = GoogleConfigOverrides {
+        api_base_url: cli.api_base_url.clone(),
+        api_version: cli.api_version.clone(),
+        timeout_seconds: cli.timeout_seconds,
+        output_format: cli.format.map(Into::into),
+        ..GoogleConfigOverrides::default()
+    };
 
     let result = match cli.command {
         Command::Providers { command } => Ok(handle_providers(command)),
-        Command::Google => Ok(handle_placeholder_provider("google")),
+        Command::Google { command } => {
+            let google_result = dispatch_google(
+                command,
+                &secret_store,
+                cli.config.as_deref(),
+                &google_overrides,
+            )
+            .await;
+            match google_result {
+                Ok(result) => Ok(result),
+                Err(google_err) => {
+                    let payload = google_error_payload(&google_err);
+                    let rendered = if output_options.pretty {
+                        serde_json::to_string_pretty(&payload)
+                    } else {
+                        serde_json::to_string(&payload)
+                    }
+                    .unwrap_or_else(|_| {
+                        "{\"error\":{\"message\":\"failed to serialize error\"}}".to_string()
+                    });
+                    eprintln!("{rendered}");
+                    return ExitCode::from(google_err.exit_code() as u8);
+                }
+            }
+        }
         Command::Tiktok { command } => {
             let tiktok_result = dispatch_tiktok(
                 command,
@@ -300,6 +345,30 @@ async fn dispatch_tiktok(
     }
 }
 
+async fn dispatch_google(
+    command: GoogleCommand,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    config_path: Option<&Path>,
+    overrides: &GoogleConfigOverrides,
+) -> Result<CommandResult, GoogleError> {
+    match command {
+        GoogleCommand::Auth { command } => google::handle_auth(command, secret_store),
+        GoogleCommand::Config { command } => {
+            let snapshot = google_inspect(config_path, secret_store, overrides)?;
+            google::handle_config(command, snapshot)
+        }
+        GoogleCommand::Doctor(args) => {
+            let snapshot = google_inspect(config_path, secret_store, overrides)?;
+            google::handle_doctor(args, config_path, secret_store, overrides, snapshot).await
+        }
+        command => {
+            let config = GoogleResolvedConfig::load(config_path, secret_store, overrides)?;
+            let client = GoogleClient::from_config(&config).await?;
+            google::dispatch_google_with_client(&client, &config, command).await
+        }
+    }
+}
+
 fn tiktok_error_payload(error: &TikTokError) -> Value {
     match error {
         TikTokError::Api(TikTokApiError {
@@ -325,6 +394,34 @@ fn tiktok_error_payload(error: &TikTokError) -> Value {
     }
 }
 
+fn google_error_payload(error: &GoogleError) -> Value {
+    match error {
+        GoogleError::Api(GoogleApiError {
+            message,
+            status,
+            code,
+            request_id,
+            ..
+        }) => json!({
+            "error": {
+                "kind": "api",
+                "provider": "google",
+                "message": message,
+                "status": status,
+                "code": code,
+                "request_id": request_id,
+            }
+        }),
+        _ => json!({
+            "error": {
+                "kind": "internal",
+                "provider": "google",
+                "message": error.to_string()
+            }
+        }),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Providers
 // ---------------------------------------------------------------------------
@@ -341,9 +438,9 @@ fn handle_providers(command: ProvidersCommand) -> CommandResult {
                 },
                 {
                     "provider": "google",
-                    "implemented": false,
-                    "status": "planned",
-                    "summary": "Google Ads namespace is reserved but not implemented yet."
+                    "implemented": true,
+                    "status": "available",
+                    "summary": "Read-only Google Ads support with native GAQL."
                 },
                 {
                     "provider": "tiktok",
@@ -356,20 +453,6 @@ fn handle_providers(command: ProvidersCommand) -> CommandResult {
             0,
         ),
     }
-}
-
-fn handle_placeholder_provider(provider: &str) -> CommandResult {
-    static_command_result(
-        json!({
-            "provider": provider,
-            "implemented": false,
-            "message": format!(
-                "{provider} commands are not implemented yet. Use `agent-ads providers list` to inspect available providers or `agent-ads meta ...` for the current implementation."
-            )
-        }),
-        &format!("/providers/{provider}"),
-        0,
-    )
 }
 
 // ---------------------------------------------------------------------------
@@ -800,6 +883,66 @@ mod tests {
 
         assert!(!credential_store_check_ok(&snapshot));
         assert!(credential_store_detail(&snapshot).contains("OS credential store unavailable"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Google CLI tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn google_help_lists_command_topics() {
+        let help = nested_help(&["google"]);
+        assert!(help.contains("customers"));
+        assert!(help.contains("campaigns"));
+        assert!(help.contains("adgroups"));
+        assert!(help.contains("ads"));
+        assert!(help.contains("gaql"));
+        assert!(help.contains("auth"));
+        assert!(help.contains("doctor"));
+        assert!(help.contains("config"));
+    }
+
+    #[test]
+    fn google_gaql_search_parses() {
+        let cli = Cli::try_parse_from([
+            "agent-ads",
+            "google",
+            "gaql",
+            "search",
+            "--customer-id",
+            "123-456-7890",
+            "--query",
+            "SELECT campaign.id FROM campaign",
+            "--page-size",
+            "100",
+        ])
+        .unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Google"));
+        assert!(debug.contains("Gaql"));
+    }
+
+    #[test]
+    fn google_auth_set_parses() {
+        let cli = Cli::try_parse_from([
+            "agent-ads",
+            "google",
+            "auth",
+            "set",
+            "--developer-token",
+            "dev-token",
+            "--client-id",
+            "client-id",
+            "--client-secret",
+            "client-secret",
+            "--refresh-token",
+            "refresh-token",
+        ])
+        .unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Google"));
+        assert!(debug.contains("Auth"));
+        assert!(debug.contains("Set"));
     }
 
     // -----------------------------------------------------------------------

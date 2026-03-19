@@ -8,7 +8,13 @@
       "default_business_id": "1234567890",
       "default_account_id": "act_1234567890"
     },
-    "google": {},
+    "google": {
+      "api_base_url": "https://googleads.googleapis.com",
+      "api_version": "v23",
+      "timeout_seconds": 60,
+      "default_customer_id": "1234567890",
+      "login_customer_id": "1112223333"
+    },
     "tiktok": {}
   }
 }

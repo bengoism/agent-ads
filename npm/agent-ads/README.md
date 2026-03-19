@@ -37,8 +37,8 @@ agent-ads meta insights query \
 ## What's Supported
 
 - **Meta (Facebook/Instagram)**: businesses, ad accounts, campaigns, ad sets, ads, insights (sync + async), creatives, activities, pixels, datasets, pixel health
-- **Google Ads**: namespace reserved, not yet implemented
-- **TikTok Ads**: namespace reserved, not yet implemented
+- **Google Ads**: customers, hierarchies, campaigns, ad groups, ads, native GAQL search/search-stream, auth/config/doctor
+- **TikTok Ads**: advertisers, campaigns, ad groups, ads, reporting, creatives, pixels, audiences, auth/config/doctor
 
 ## Key Features
 
@@ -54,6 +54,7 @@ agent-ads meta insights query \
 - [GitHub repo](https://github.com/bengoism/agent-ads)
 - [Agent skill](https://github.com/bengoism/agent-ads/tree/main/skills/agent-ads)
 - [Meta reference docs](https://github.com/bengoism/agent-ads/tree/main/skills/agent-ads/references)
+- [Google reference docs](https://github.com/bengoism/agent-ads/tree/main/skills/agent-ads/references/google.md)
 
 ## License
 
