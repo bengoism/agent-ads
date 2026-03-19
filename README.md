@@ -403,68 +403,13 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 | `tiktok config validate` | Validate config file |
 | `tiktok doctor` | Verify auth, config, and (optionally) API connectivity |
 
-## Global Flags
-
-These flags work with any command:
-
-| Flag | Description |
-|------|-------------|
-| `--config <path>` | Config file path (default: `agent-ads.config.json`) |
-| `--api-base-url <url>` | Override the active provider API base URL |
-| `--api-version <version>` | Override the active provider API version (e.g. Meta `v25.0`, Google `v23`) |
-| `--timeout-seconds <n>` | HTTP request timeout |
-| `--format json\|jsonl\|csv` | Output format (default: `json`) |
-| `--output <path>` | Write output to file instead of stdout (`-` for stdout) |
-| `--pretty` | Pretty-print JSON output |
-| `--envelope` | Include response metadata, paging info, and warnings |
-| `--include-meta` | Add metadata columns to CSV output |
-| `-q, --quiet` | Suppress warnings and non-data output |
-| `-v, --verbose` | Increase log verbosity (repeat for debug: `-vv`) |
-
-## Pagination
-
-Pagination differs by provider.
-
-### Meta (cursor-based)
-
-| Flag | Description |
-|------|-------------|
-| `--page-size <n>` | Number of items per API request |
-| `--cursor <token>` | Resume from a specific cursor |
-| `--all` | Automatically follow all pages |
-| `--max-items <n>` | Stop after collecting N total items |
-
-Use `--all` to fetch everything, or `--max-items 100` to cap results. Without either flag, you get one page of results and can use `--envelope` to see the paging cursor for the next page.
-
-### Google (page-token)
-
-| Flag | Description |
-|------|-------------|
-| `--page-token <token>` | Resume from a Google `nextPageToken` |
-| `--all` | Automatically follow all pages |
-| `--max-items <n>` | Stop after collecting N total rows |
-
-Google `search` uses fixed-size result pages from the API. Use `--page-token` to resume, `--all` to follow every page, or `--max-items` to stop early.
-
-### TikTok (page-number)
-
-| Flag | Description |
-|------|-------------|
-| `--page-size <n>` | Number of items per page |
-| `--page <n>` | Page number (1-indexed) |
-| `--all` | Automatically follow all pages |
-| `--max-items <n>` | Stop after collecting N total items |
-
 ## Configuration
 
-### Secret resolution
+### Secrets
 
-Secrets resolve in this order (per provider):
+Secrets resolve per provider: shell environment first, then OS credential store. `.env` files are not read. Secrets are never read from config files or CLI flags.
 
-1. Shell environment (for example `META_ADS_ACCESS_TOKEN` or `GOOGLE_ADS_REFRESH_TOKEN`)
-2. OS credential store (`agent-ads <provider> auth set`)
-
-`.env` files are not read.
+Store credentials persistently with `agent-ads <provider> auth set`. Override in CI or one-off sessions with shell env vars (shown in each Quick Start above).
 
 ### Non-secret precedence
 
@@ -472,13 +417,7 @@ CLI flags > shell environment > `agent-ads.config.json`
 
 ### Config file
 
-Copy the example to get started:
-
-```bash
-cp agent-ads.config.json.example agent-ads.config.json
-```
-
-Supported keys:
+Create a config file to set defaults and avoid repeating flags:
 
 ```json
 {
@@ -508,65 +447,18 @@ Supported keys:
 }
 ```
 
-Setting `default_business_id` / `default_account_id` (Meta), `default_customer_id` / `login_customer_id` (Google), or `default_advertiser_id` (TikTok) lets you omit those flags from commands.
-
-### Environment variables
-
-| Variable | Provider | Required | Description |
-|----------|----------|----------|-------------|
-| `META_ADS_ACCESS_TOKEN` | Meta | No | Shell override / CI fallback for the Meta API access token |
-| `GOOGLE_ADS_DEVELOPER_TOKEN` | Google | No | Shell override / CI fallback for the Google Ads developer token |
-| `GOOGLE_ADS_CLIENT_ID` | Google | No | Shell override / CI fallback for the Google OAuth client ID |
-| `GOOGLE_ADS_CLIENT_SECRET` | Google | No | Shell override / CI fallback for the Google OAuth client secret |
-| `GOOGLE_ADS_REFRESH_TOKEN` | Google | No | Shell override / CI fallback for the Google OAuth refresh token |
-| `GOOGLE_ADS_DEFAULT_CUSTOMER_ID` | Google | No | Default customer ID for Google customer-scoped commands |
-| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Google | No | Manager account header for Google customer-scoped commands |
-| `TIKTOK_ADS_ACCESS_TOKEN` | TikTok | No | Shell override / CI fallback for the TikTok API access token |
-| `TIKTOK_ADS_REFRESH_TOKEN` | TikTok | No | Refresh token for `auth refresh` flow |
-| `TIKTOK_ADS_APP_ID` | TikTok | For `advertisers list` and `auth refresh` | TikTok app ID |
-| `TIKTOK_ADS_APP_SECRET` | TikTok | For `advertisers list` and `auth refresh` | TikTok app secret |
-
-Secrets are never read from config files. Runtime auth resolution uses shell environment variables or the OS credential store; `agent-ads google auth set` can also accept CLI flags when seeding the credential store.
+Setting `default_account_id` (Meta), `default_customer_id` (Google), or `default_advertiser_id` (TikTok) lets you omit those flags from commands.
 
 ## Output
 
 Default output is **data-only JSON** on stdout. Errors are JSON on stderr.
 
-### Formats
+- `--format json|jsonl|csv` — choose output format (default: `json`)
+- `--output <path>` — write to a file instead of stdout
+- `--pretty` — pretty-print JSON
+- `--envelope` — wrap data with `{ "data": ..., "meta": ..., "paging": ... }`
 
-```bash
-# Default: JSON array
-agent-ads meta businesses list
-# [{"id":"123","name":"My Business"}]
-
-# One JSON object per line (good for streaming/piping)
-agent-ads meta businesses list --format jsonl
-# {"id":"123","name":"My Business"}
-
-# CSV (good for spreadsheets)
-agent-ads meta businesses list --format csv
-# id,name
-# 123,My Business
-
-# Pretty-printed JSON
-agent-ads meta businesses list --pretty
-```
-
-### Envelope mode
-
-Add `--envelope` to wrap data with response metadata, provider-native paging info, and warnings:
-
-```bash
-agent-ads meta businesses list --envelope --pretty
-```
-
-```json
-{
-  "data": [{ "id": "123", "name": "My Business" }],
-  "meta": { "api_version": "v25.0", "endpoint": "/me/businesses" },
-  "paging": { "cursors": { "before": "...", "after": "..." }, "next": "..." }
-}
-```
+Pagination differs by provider (`--all` auto-follows all pages for every provider). Run `agent-ads <provider> --help` for provider-specific flags.
 
 ### Exit codes
 

@@ -19,38 +19,6 @@ This is the routing guide for the Meta provider. Read this first when the user w
 
 Load only the reference file you need. Do not preload all of them.
 
-## Quick Reference
-
-### Auth (secure storage or shell env — never from flags or config files)
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `META_ADS_ACCESS_TOKEN` | No | Shell override / CI fallback bearer token |
-
-Persistent local auth is stored with `agent-ads meta auth set`.
-
-### Config precedence
-
-Token precedence: shell env > OS credential store
-
-Non-secret precedence: CLI flags > shell env > `agent-ads.config.json`
-
-### Output defaults
-
-- stdout: data-only JSON (no wrapper)
-- stderr: errors as JSON, warnings as text
-- `--envelope` adds metadata/paging wrapper
-- `--format json|jsonl|csv`
-
-### Exit codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | Transport or internal failure |
-| 2 | Config or argument failure |
-| 3 | Meta API failure |
-
 ## Common Mistakes
 
 - Forgetting `META_ADS_ACCESS_TOKEN` before running API commands

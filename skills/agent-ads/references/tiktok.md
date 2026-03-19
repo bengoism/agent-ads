@@ -13,49 +13,13 @@ This is the routing guide for the TikTok provider. Read this first when the user
 | Manage async report tasks | `agent-ads tiktok report-runs submit/status/cancel` | [tiktok-reports.md](tiktok-reports.md) |
 | Search video/image creative assets | `agent-ads tiktok creatives videos --advertiser-id <id>` | [tiktok-creative-and-tracking.md](tiktok-creative-and-tracking.md) |
 | List pixels or audiences | `agent-ads tiktok pixels list --advertiser-id <id>` | [tiktok-creative-and-tracking.md](tiktok-creative-and-tracking.md) |
+| Follow an end-to-end recipe | — | [tiktok-workflows.md](tiktok-workflows.md) |
 
 Load only the reference file you need. Do not preload all of them.
 
-## Quick Reference
+## Pagination
 
-### Auth (secure storage or shell env — never from flags or config files)
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `TIKTOK_ADS_ACCESS_TOKEN` | No | Shell override / CI fallback access token |
-| `TIKTOK_ADS_REFRESH_TOKEN` | No | Refresh token (for `auth refresh` flow) |
-| `TIKTOK_ADS_APP_ID` | For `advertisers list` and `auth refresh` | TikTok app ID |
-| `TIKTOK_ADS_APP_SECRET` | For `advertisers list` and `auth refresh` | TikTok app secret |
-
-Persistent local auth is stored with `agent-ads tiktok auth set`.
-
-### Config precedence
-
-Token precedence: shell env > OS credential store
-
-Refresh token precedence for `auth refresh`: `TIKTOK_ADS_REFRESH_TOKEN` > OS credential store
-
-Non-secret precedence: CLI flags > shell env > `agent-ads.config.json` (under `providers.tiktok`)
-
-### Output defaults
-
-- stdout: data-only JSON (no wrapper)
-- stderr: errors as JSON, warnings as text
-- `--envelope` adds metadata/paging wrapper
-- `--format json|jsonl|csv`
-
-### Exit codes
-
-| Code | Meaning |
-|------|---------|
-| 0 | Success |
-| 1 | Transport or internal failure |
-| 2 | Config or argument failure |
-| 4 | TikTok API failure |
-
-### Pagination (different from Meta)
-
-TikTok uses page-number pagination, not cursor-based:
+TikTok uses page-number pagination (not cursor-based like Meta):
 
 | Flag | What it does |
 |------|-------------|

@@ -12,6 +12,7 @@ This is the provider guide for Google Ads. Read this first when the user wants t
 | List campaigns, ad groups, or ads | `agent-ads google campaigns list --customer-id <id>` |
 | Run a provider-native query | `agent-ads google gaql search --customer-id <id> --query "..."` |
 | Stream a large query result | `agent-ads google gaql search-stream --customer-id <id> --query-file query.sql` |
+| Follow an end-to-end recipe | See [google-workflows.md](google-workflows.md) |
 
 ## Auth Model
 

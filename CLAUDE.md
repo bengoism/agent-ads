@@ -4,7 +4,7 @@ Project conventions for agents working in this repo.
 
 ## What this is
 
-`agent-ads` is a Rust CLI distributed via npm. It queries ad platform APIs (Meta Marketing API and TikTok Business API, read-only). The architecture is provider-explicit: every command starts with `agent-ads <provider> ...`.
+`agent-ads` is a Rust CLI distributed via npm. It queries ad platform APIs (Meta Marketing API, Google Ads, and TikTok Business API, read-only). The architecture is provider-explicit: every command starts with `agent-ads <provider> ...`.
 
 ## Repo structure
 
@@ -32,18 +32,18 @@ npm run docs:generate          # regenerate docs/command-topics.md from CLI help
 
 - **Provider-explicit commands**: always `agent-ads meta ...`, never `agent-ads campaigns ...`
 - **No colon syntax**: `agent-ads meta insights query`, not `agent-ads meta:insights:query`
-- **Secrets from secure storage**: `META_ADS_ACCESS_TOKEN` / `TIKTOK_ADS_ACCESS_TOKEN` come from shell env or the OS credential store, never from flags or config files
+- **Secrets from secure storage**: `META_ADS_ACCESS_TOKEN` / `GOOGLE_ADS_*` / `TIKTOK_ADS_ACCESS_TOKEN` come from shell env or the OS credential store, never from flags or config files
 - **Secret precedence**: shell env > OS credential store
 - **Non-secret precedence**: CLI flags > shell env > `agent-ads.config.json`
 - **Data-only output**: stdout is raw JSON by default (no envelope). Use `--envelope` for metadata/paging wrapper
 - **Errors on stderr**: always JSON format
-- **Exit codes**: 0=success, 1=transport/internal, 2=config/argument, 3=Meta API, 4=TikTok API
+- **Exit codes**: 0=success, 1=transport/internal, 2=config/argument, 3=Meta API, 4=TikTok API, 5=Google API
 - **Read-only**: the CLI does not create, update, or delete any ad objects
 
 ## Adding new commands
 
-1. Add the endpoint function in `crates/agent_ads_core/src/endpoints.rs` (Meta) or `tiktok_endpoints.rs` (TikTok)
-2. Add clap args and dispatch in `crates/agent_ads_cli/src/main.rs` (and `tiktok.rs` for TikTok)
+1. Add the endpoint function in `crates/agent_ads_core/src/endpoints.rs` (Meta), `google_endpoints.rs` (Google), or `tiktok_endpoints.rs` (TikTok)
+2. Add clap args and dispatch in `crates/agent_ads_cli/src/main.rs` (and `google.rs` for Google, `tiktok.rs` for TikTok)
 3. Always include an `about = "..."` on the clap subcommand
 4. Run `cargo fmt && cargo test`
 5. Update the relevant reference doc in `skills/agent-ads/references/`
@@ -53,7 +53,7 @@ npm run docs:generate          # regenerate docs/command-topics.md from CLI help
 
 - `cargo test` runs unit tests (clap arg parsing, help rendering)
 - `npm run test:smoke` runs the built binary with `--help` and `providers list`
-- There are no integration tests that hit the Meta API or TikTok API (would require real tokens)
+- There are no integration tests that hit the Meta API, Google Ads API, or TikTok API (would require real tokens)
 
 ## Docs structure
 
@@ -61,9 +61,11 @@ npm run docs:generate          # regenerate docs/command-topics.md from CLI help
 - `CLAUDE.md` — this file, for agents
 - `skills/agent-ads/SKILL.md` — agent skill entrypoint
 - `skills/agent-ads/references/meta.md` — Meta routing guide
-- `skills/agent-ads/references/meta-*.md` — topic-specific reference files
+- `skills/agent-ads/references/meta-*.md` — Meta topic-specific reference files
+- `skills/agent-ads/references/google.md` — Google routing guide
+- `skills/agent-ads/references/google-workflows.md` — Google end-to-end recipes
 - `skills/agent-ads/references/tiktok.md` — TikTok routing guide
-- `skills/agent-ads/references/tiktok-*.md` — topic-specific reference files
+- `skills/agent-ads/references/tiktok-*.md` — TikTok topic-specific reference files
 - `docs/command-topics.md` — generated exhaustive CLI reference
 
 Do not edit `docs/command-topics.md` by hand. Edit clap `about`/`help` strings in Rust source and regenerate.
