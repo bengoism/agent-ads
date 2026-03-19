@@ -43,6 +43,7 @@ Plain-English prompts that work. The agent translates these into the right CLI c
 - "What audiences do I have in Pinterest?"
 
 **Setup & troubleshooting**
+- "Show me which providers are already authenticated"
 - "Help me set up my Meta auth token"
 - "Is my TikTok token still valid?"
 - "Refresh my Pinterest token"
@@ -91,6 +92,8 @@ Every command starts with `agent-ads <provider>`. This is intentional — each a
 
 Check live: `agent-ads providers list`
 
+For a cross-provider auth summary or guided local setup, use `agent-ads auth`.
+
 Each routing guide tells you which specific reference file to load based on the task. Load only the file you need — do not preload all of them.
 
 ## Shared Behavior
@@ -108,7 +111,8 @@ These apply to every provider and every command.
 
 - Secrets: shell env > OS credential store. Never from flags or config files.
 - Non-secrets: CLI flags > shell env > `agent-ads.config.json`
-- Persistent auth: `agent-ads <provider> auth set`
+- Guided local auth setup: `agent-ads auth`
+- Persistent provider auth: `agent-ads <provider> auth set`
 - Shell override / CI: provider-specific env vars (e.g. `META_ADS_ACCESS_TOKEN`, `GOOGLE_ADS_REFRESH_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `PINTEREST_ADS_REFRESH_TOKEN`)
 - Linux secure storage requires a running Secret Service provider (GNOME Keyring, KWallet)
 

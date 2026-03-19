@@ -29,6 +29,24 @@ cargo build
 
 The npm package is a thin CLI launcher. There is no supported JavaScript API.
 
+## Auth Helper
+
+For local setup, start with:
+
+```bash
+agent-ads auth
+```
+
+This shows which implemented providers are configured and lets you pick one to set up interactively.
+
+For a machine-readable summary:
+
+```bash
+agent-ads auth status
+```
+
+Provider-native auth commands remain canonical for CI and explicit scripting: `agent-ads <provider> auth ...`.
+
 ## Quick Start (Meta)
 
 ### 1. Authenticate
@@ -138,26 +156,27 @@ agent-ads meta insights query \
 
 ### 1. Authenticate
 
-TikTok requires an access token and app credentials. Store the token in your OS credential store:
+TikTok requires an app ID, app secret, access token, and refresh token. Store the full set once in your OS credential store:
 
 ```bash
-agent-ads tiktok auth set
+agent-ads tiktok auth set --full
 ```
+
+This prompts for app ID, app secret, and access token. Refresh token is optional.
 
 Or set shell variables:
 
 ```bash
 export TIKTOK_ADS_ACCESS_TOKEN=abc123...
+export TIKTOK_ADS_REFRESH_TOKEN=refresh123...
 export TIKTOK_ADS_APP_ID=your_app_id
 export TIKTOK_ADS_APP_SECRET=your_app_secret
 ```
 
-TikTok tokens expire every 24 hours. Refresh with:
+TikTok access tokens expire every 24 hours. Refresh with stored or shell-provided app credentials:
 
 ```bash
-agent-ads tiktok auth refresh \
-  --app-id $TIKTOK_ADS_APP_ID \
-  --app-secret $TIKTOK_ADS_APP_SECRET
+agent-ads tiktok auth refresh
 ```
 
 ### 2. Verify your setup
@@ -357,6 +376,8 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 
 | Command | Description |
 |---------|-------------|
+| `agent-ads auth` | Show aggregated auth status and route into setup |
+| `agent-ads auth status` | Show aggregated auth status across implemented providers |
 | `agent-ads providers list` | Show available and planned providers |
 | `agent-ads meta ...` | Meta Marketing API commands |
 | `agent-ads google ...` | Google Ads commands |
@@ -469,10 +490,12 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 
 | Command | Description |
 |---------|-------------|
-| `tiktok auth set` | Store the TikTok token in the OS credential store |
-| `tiktok auth status` | Show auth source and secure storage status |
-| `tiktok auth delete` | Delete the stored TikTok token |
-| `tiktok auth refresh` | Refresh the TikTok access token |
+| `tiktok auth set` | Store the TikTok access token in the OS credential store |
+| `tiktok auth set --refresh-token` | Store the TikTok access token and refresh token |
+| `tiktok auth set --full` | Store TikTok app credentials, access token, and optional refresh token |
+| `tiktok auth status` | Show auth source and secure storage status for all TikTok credentials |
+| `tiktok auth delete` | Delete stored TikTok credentials |
+| `tiktok auth refresh` | Refresh the TikTok access token using flags, shell env, or stored credentials |
 | `tiktok config path` | Show resolved config file path |
 | `tiktok config show` | Show full resolved configuration |
 | `tiktok config validate` | Validate config file |
@@ -519,7 +542,7 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 
 Secrets resolve per provider: shell environment first, then OS credential store. `.env` files are not read. Secrets are never read from config files or CLI flags.
 
-Store credentials persistently with `agent-ads <provider> auth set`. Override in CI or one-off sessions with shell env vars (shown in each Quick Start above).
+Store credentials persistently with `agent-ads auth` for guided local setup or `agent-ads <provider> auth set` for explicit provider setup. Override in CI or one-off sessions with shell env vars (shown in each Quick Start above).
 
 ### Non-secret precedence
 

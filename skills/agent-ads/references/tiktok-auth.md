@@ -13,9 +13,9 @@ TikTok uses the custom `Access-Token` HTTP header (not Bearer, not query param).
 ### Setting up auth
 
 ```bash
-# Option 1: Store in OS credential store (recommended)
-agent-ads tiktok auth set
-# Prompts for access token securely
+# Option 1: Store app credentials plus access token
+agent-ads tiktok auth set --full
+# Prompts for app ID, app secret, access token, then optional refresh token
 
 # Option 2: Store both access and refresh tokens
 agent-ads tiktok auth set --refresh-token
@@ -27,6 +27,10 @@ echo "$TOKEN" | agent-ads tiktok auth set --stdin
 # Option 3b: Pipe both access + refresh tokens from stdin
 printf '%s\n%s\n' "$ACCESS_TOKEN" "$REFRESH_TOKEN" | \
   agent-ads tiktok auth set --stdin --refresh-token
+
+# Option 3c: Pipe app ID, app secret, access token, and optional refresh token
+printf '%s\n%s\n%s\n%s\n' "$APP_ID" "$APP_SECRET" "$ACCESS_TOKEN" "$REFRESH_TOKEN" | \
+  agent-ads tiktok auth set --stdin --full
 
 # Option 4: Shell env (CI / ephemeral)
 export TIKTOK_ADS_ACCESS_TOKEN=your_token_here
@@ -47,7 +51,7 @@ export TIKTOK_ADS_REFRESH_TOKEN=your_refresh_token
 agent-ads tiktok auth refresh
 ```
 
-`auth refresh` resolves the refresh token from `TIKTOK_ADS_REFRESH_TOKEN` first, then falls back to the OS credential store.
+`auth refresh` resolves app ID, app secret, and refresh token from CLI flags first, then shell env, then the OS credential store.
 
 This stores the new access token (and updated refresh token) in the OS credential store.
 
@@ -57,9 +61,10 @@ This stores the new access token (and updated refresh token) in the OS credentia
 |---------|-------------|
 | `agent-ads tiktok auth set` | Store access token |
 | `agent-ads tiktok auth set --refresh-token` | Store both tokens |
-| `agent-ads tiktok auth status` | Show token source and storage status |
-| `agent-ads tiktok auth delete` | Delete all stored TikTok tokens |
-| `agent-ads tiktok auth refresh --app-id ... --app-secret ...` | Rotate access token |
+| `agent-ads tiktok auth set --full` | Store app credentials plus access token, with optional refresh token |
+| `agent-ads tiktok auth status` | Show credential source and storage status |
+| `agent-ads tiktok auth delete` | Delete all stored TikTok credentials |
+| `agent-ads tiktok auth refresh [--app-id ... --app-secret ...]` | Rotate access token |
 
 ## Configuration
 

@@ -23,6 +23,10 @@ pub const PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT: &str = "pinterest-ads-refresh-tok
 
 pub const TIKTOK_ACCESS_TOKEN_SERVICE: &str = "agent-ads";
 pub const TIKTOK_ACCESS_TOKEN_ACCOUNT: &str = "tiktok-access-token";
+pub const TIKTOK_APP_ID_SERVICE: &str = "agent-ads";
+pub const TIKTOK_APP_ID_ACCOUNT: &str = "tiktok-app-id";
+pub const TIKTOK_APP_SECRET_SERVICE: &str = "agent-ads";
+pub const TIKTOK_APP_SECRET_ACCOUNT: &str = "tiktok-app-secret";
 pub const TIKTOK_REFRESH_TOKEN_SERVICE: &str = "agent-ads";
 pub const TIKTOK_REFRESH_TOKEN_ACCOUNT: &str = "tiktok-refresh-token";
 
