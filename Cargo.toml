@@ -3,7 +3,7 @@ members = ["crates/agent_ads_core", "crates/agent_ads_cli"]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 license = "MIT"
 authors = ["bengoism"]
