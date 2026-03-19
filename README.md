@@ -2,7 +2,7 @@
 
 CLI for querying ad platform APIs.
 
-Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram) and TikTok supported today, read-only.
+Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram), Google Ads, and TikTok supported today, read-only.
 
 ## Install
 
@@ -210,6 +210,71 @@ agent-ads tiktok insights query \
   --output report.csv
 ```
 
+## Quick Start (Google)
+
+### 1. Authenticate
+
+Google Ads requires a developer token, OAuth client ID, OAuth client secret, and OAuth refresh token. Store them once in your OS credential store:
+
+```bash
+agent-ads google auth set
+```
+
+Or set shell variables for the current process:
+
+```bash
+export GOOGLE_ADS_DEVELOPER_TOKEN=devtoken...
+export GOOGLE_ADS_CLIENT_ID=client-id.apps.googleusercontent.com
+export GOOGLE_ADS_CLIENT_SECRET=client-secret
+export GOOGLE_ADS_REFRESH_TOKEN=refresh-token
+```
+
+Optional defaults:
+
+```bash
+export GOOGLE_ADS_DEFAULT_CUSTOMER_ID=1234567890
+export GOOGLE_ADS_LOGIN_CUSTOMER_ID=1112223333
+```
+
+### 2. Verify your setup
+
+```bash
+agent-ads google doctor
+```
+
+Add `--api` to exchange the refresh token and ping the Google Ads API.
+
+### 3. Discover your customers
+
+```bash
+agent-ads google customers list
+agent-ads google customers hierarchy --customer-id 1234567890
+```
+
+### 4. Explore campaigns
+
+```bash
+agent-ads google campaigns list --customer-id 1234567890
+```
+
+### 5. Run a GAQL query
+
+```bash
+agent-ads google gaql search \
+  --customer-id 1234567890 \
+  --query "SELECT campaign.id, campaign.name, metrics.impressions, metrics.clicks FROM campaign"
+```
+
+### 6. Stream to CSV
+
+```bash
+agent-ads google gaql search-stream \
+  --customer-id 1234567890 \
+  --query-file campaign-query.sql \
+  --format csv \
+  --output google-report.csv
+```
+
 ## Command Overview
 
 Providers are always explicit: `agent-ads <provider> <command>`. There is no cross-provider abstraction.
@@ -220,8 +285,8 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 |---------|-------------|
 | `agent-ads providers list` | Show available and planned providers |
 | `agent-ads meta ...` | Meta Marketing API commands |
+| `agent-ads google ...` | Google Ads commands |
 | `agent-ads tiktok ...` | TikTok Business API commands |
-| `agent-ads google` | Placeholder (not implemented) |
 
 ### Meta: Discovery
 
@@ -273,6 +338,30 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 | `meta config validate` | Validate config file |
 | `meta doctor` | Verify auth, config, and (optionally) API connectivity |
 
+### Google: Discovery & Objects
+
+| Command | Description |
+|---------|-------------|
+| `google customers list` | List customers accessible to your credentials |
+| `google customers hierarchy` | Explore a customer hierarchy via `customer_client` |
+| `google campaigns list` | List campaigns for a customer |
+| `google adgroups list` | List ad groups for a customer |
+| `google ads list` | List ads for a customer |
+
+### Google: GAQL & Diagnostics
+
+| Command | Description |
+|---------|-------------|
+| `google gaql search` | Run a paged GAQL search |
+| `google gaql search-stream` | Run a streamed GAQL search |
+| `google auth set` | Store Google Ads credentials in the OS credential store |
+| `google auth status` | Show auth source and secure storage status |
+| `google auth delete` | Delete stored Google Ads credentials |
+| `google config path` | Show resolved config file path |
+| `google config show` | Show full resolved configuration |
+| `google config validate` | Validate config file |
+| `google doctor` | Verify auth, config, and (optionally) API connectivity |
+
 ### TikTok: Discovery
 
 | Command | Description |
@@ -321,8 +410,8 @@ These flags work with any command:
 | Flag | Description |
 |------|-------------|
 | `--config <path>` | Config file path (default: `agent-ads.config.json`) |
-| `--api-base-url <url>` | Override Meta API base URL |
-| `--api-version <version>` | Override API version (e.g. `v25.0`) |
+| `--api-base-url <url>` | Override the active provider API base URL |
+| `--api-version <version>` | Override the active provider API version (e.g. Meta `v25.0`, Google `v23`) |
 | `--timeout-seconds <n>` | HTTP request timeout |
 | `--format json\|jsonl\|csv` | Output format (default: `json`) |
 | `--output <path>` | Write output to file instead of stdout (`-` for stdout) |
@@ -347,6 +436,16 @@ Pagination differs by provider.
 
 Use `--all` to fetch everything, or `--max-items 100` to cap results. Without either flag, you get one page of results and can use `--envelope` to see the paging cursor for the next page.
 
+### Google (page-token)
+
+| Flag | Description |
+|------|-------------|
+| `--page-token <token>` | Resume from a Google `nextPageToken` |
+| `--all` | Automatically follow all pages |
+| `--max-items <n>` | Stop after collecting N total rows |
+
+Google `search` uses fixed-size result pages from the API. Use `--page-token` to resume, `--all` to follow every page, or `--max-items` to stop early.
+
 ### TikTok (page-number)
 
 | Flag | Description |
@@ -360,9 +459,9 @@ Use `--all` to fetch everything, or `--max-items 100` to cap results. Without ei
 
 ### Secret resolution
 
-Tokens resolve in this order (per provider):
+Secrets resolve in this order (per provider):
 
-1. Shell environment (`META_ADS_ACCESS_TOKEN` / `TIKTOK_ADS_ACCESS_TOKEN`)
+1. Shell environment (for example `META_ADS_ACCESS_TOKEN` or `GOOGLE_ADS_REFRESH_TOKEN`)
 2. OS credential store (`agent-ads <provider> auth set`)
 
 `.env` files are not read.
@@ -392,6 +491,13 @@ Supported keys:
       "default_business_id": "1234567890",
       "default_account_id": "act_1234567890"
     },
+    "google": {
+      "api_base_url": "https://googleads.googleapis.com",
+      "api_version": "v23",
+      "timeout_seconds": 60,
+      "default_customer_id": "1234567890",
+      "login_customer_id": "1112223333"
+    },
     "tiktok": {
       "api_base_url": "https://business-api.tiktok.com",
       "api_version": "v1.3",
@@ -402,19 +508,25 @@ Supported keys:
 }
 ```
 
-Setting `default_business_id` / `default_account_id` (Meta) or `default_advertiser_id` (TikTok) lets you omit those flags from commands.
+Setting `default_business_id` / `default_account_id` (Meta), `default_customer_id` / `login_customer_id` (Google), or `default_advertiser_id` (TikTok) lets you omit those flags from commands.
 
 ### Environment variables
 
 | Variable | Provider | Required | Description |
 |----------|----------|----------|-------------|
 | `META_ADS_ACCESS_TOKEN` | Meta | No | Shell override / CI fallback for the Meta API access token |
+| `GOOGLE_ADS_DEVELOPER_TOKEN` | Google | No | Shell override / CI fallback for the Google Ads developer token |
+| `GOOGLE_ADS_CLIENT_ID` | Google | No | Shell override / CI fallback for the Google OAuth client ID |
+| `GOOGLE_ADS_CLIENT_SECRET` | Google | No | Shell override / CI fallback for the Google OAuth client secret |
+| `GOOGLE_ADS_REFRESH_TOKEN` | Google | No | Shell override / CI fallback for the Google OAuth refresh token |
+| `GOOGLE_ADS_DEFAULT_CUSTOMER_ID` | Google | No | Default customer ID for Google customer-scoped commands |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Google | No | Manager account header for Google customer-scoped commands |
 | `TIKTOK_ADS_ACCESS_TOKEN` | TikTok | No | Shell override / CI fallback for the TikTok API access token |
 | `TIKTOK_ADS_REFRESH_TOKEN` | TikTok | No | Refresh token for `auth refresh` flow |
 | `TIKTOK_ADS_APP_ID` | TikTok | For `advertisers list` and `auth refresh` | TikTok app ID |
 | `TIKTOK_ADS_APP_SECRET` | TikTok | For `advertisers list` and `auth refresh` | TikTok app secret |
 
-Secrets are never read from config files or CLI flags. Persistent secrets live in the OS credential store; shell environment variables remain supported for temporary runs and CI.
+Secrets are never read from config files. Runtime auth resolution uses shell environment variables or the OS credential store; `agent-ads google auth set` can also accept CLI flags when seeding the credential store.
 
 ## Output
 
@@ -442,7 +554,7 @@ agent-ads meta businesses list --pretty
 
 ### Envelope mode
 
-Add `--envelope` to wrap data with response metadata, paging cursors, and warnings:
+Add `--envelope` to wrap data with response metadata, provider-native paging info, and warnings:
 
 ```bash
 agent-ads meta businesses list --envelope --pretty
@@ -465,6 +577,7 @@ agent-ads meta businesses list --envelope --pretty
 | 2 | Config or argument error |
 | 3 | Meta API error |
 | 4 | TikTok API error |
+| 5 | Google API error |
 
 ## Docs Map
 
@@ -473,9 +586,10 @@ agent-ads meta businesses list --envelope --pretty
 | Humans | This README, then `agent-ads --help` |
 | AI agents | [skills/agent-ads/SKILL.md](skills/agent-ads/SKILL.md) |
 | Meta provider deep-dive | [skills/agent-ads/references/meta.md](skills/agent-ads/references/meta.md) |
+| Google provider deep-dive | [skills/agent-ads/references/google.md](skills/agent-ads/references/google.md) |
 | TikTok provider deep-dive | [skills/agent-ads/references/tiktok.md](skills/agent-ads/references/tiktok.md) |
 | Full CLI reference (generated) | [docs/command-topics.md](docs/command-topics.md) |
-| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads tiktok --help` |
+| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads google --help`, `agent-ads tiktok --help` |
 
 ## Skills
 

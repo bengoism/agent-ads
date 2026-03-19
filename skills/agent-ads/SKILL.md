@@ -2,13 +2,14 @@
 name: agent-ads
 description: >
   Operate the provider-first ads CLI from the terminal. Use when the user wants
-  to inspect available ad providers, route work into the implemented Meta or
-  TikTok providers, or keep ad-provider commands explicit inside `agent-ads`.
+  to inspect available ad providers, route work into the implemented Meta,
+  Google, or TikTok providers, or keep ad-provider commands explicit inside
+  `agent-ads`.
 ---
 
 # Agent Ads
 
-`agent-ads` is a Unix-first CLI for querying ad platform APIs. It supports Meta (Facebook/Instagram) Marketing API and TikTok Business API. Google Ads namespace is reserved for future implementation. All commands are read-only.
+`agent-ads` is a Unix-first CLI for querying ad platform APIs. It supports Meta (Facebook/Instagram) Marketing API, Google Ads, and TikTok Business API. All commands are read-only.
 
 This file is the only public skill entrypoint. It routes you to provider-specific reference docs.
 
@@ -18,6 +19,7 @@ Plain-English prompts that work. The agent translates these into the right CLI c
 
 **Performance & reporting**
 - "Show me my Meta ad spend by campaign for the last 7 days"
+- "Run this GAQL query against Google Ads"
 - "What's my TikTok campaign performance this month?"
 - "Pull a daily breakdown of impressions and clicks across all campaigns"
 - "Export last week's Meta performance report to CSV"
@@ -25,6 +27,7 @@ Plain-English prompts that work. The agent translates these into the right CLI c
 
 **Accounts & campaigns**
 - "What businesses do I have access to in Meta?"
+- "List all my accessible Google Ads customers"
 - "List all my TikTok advertisers"
 - "Show me the campaigns in my Meta ad account"
 - "Which ad sets are running right now?"
@@ -49,8 +52,10 @@ Translating marketer language to CLI concepts:
 |---------|----------|------------|
 | business manager | Meta | `agent-ads meta businesses list` |
 | ad account | Meta | `--account act_123...` flag |
+| customer / account | Google | `--customer-id 1234567890` flag |
 | advertiser / ad account | TikTok | `--advertiser-id 123...` flag |
 | campaign performance / report | both | `insights query` command |
+| GAQL / query | Google | `gaql search`, `gaql search-stream` |
 | pixel / tag | Meta | `pixels list`, `pixel-health get` |
 | pixel | TikTok | `pixels list` |
 | audience / custom audience | TikTok | `audiences list` |
@@ -72,8 +77,8 @@ Every command starts with `agent-ads <provider>`. This is intentional — each a
 | Provider | Status | Summary |
 |----------|--------|---------|
 | `meta` | Implemented | Read-only Meta Marketing API: accounts, campaigns, insights, creatives, tracking |
+| `google` | Implemented | Read-only Google Ads: customers, hierarchies, objects, native GAQL, diagnostics |
 | `tiktok` | Implemented | Read-only TikTok Business API: advertisers, campaigns, insights, creatives, pixels, audiences |
-| `google` | Reserved | Namespace exists, commands not implemented |
 
 Check live: `agent-ads providers list`
 
@@ -83,8 +88,8 @@ Check live: `agent-ads providers list`
 |------|---------------|-----------|
 | See which providers exist | `agent-ads providers list` | this file |
 | Work with Meta (accounts, reports, creatives, tracking) | `agent-ads meta --help` | [references/meta.md](references/meta.md) |
+| Work with Google (customers, GAQL, diagnostics) | `agent-ads google --help` | [references/google.md](references/google.md) |
 | Work with TikTok (advertisers, campaigns, insights, creatives) | `agent-ads tiktok --help` | [references/tiktok.md](references/tiktok.md) |
-| Work with Google | n/a | tell the user the namespace exists but is not implemented yet |
 
 ## Global Flags
 
@@ -98,7 +103,7 @@ These flags work with every command and every provider:
 | `--pretty` | off | Pretty-print JSON |
 | `--envelope` | off | Wrap data with metadata, paging, warnings |
 | `--include-meta` | off | Add metadata columns in CSV mode |
-| `--api-version <v>` | `v25.0` | Meta API version override |
+| `--api-version <v>` | provider default | Provider API version override (Meta `v25.0`, Google `v23`) |
 | `--timeout-seconds <n>` | `60` | HTTP request timeout |
 | `-q` / `-v` | warn | Quiet mode or verbose logging (`-vv` for debug) |
 
@@ -124,12 +129,22 @@ Pagination differs by provider. Both support `--all` and `--max-items`.
 | `--all` | Auto-follow all pages |
 | `--max-items <n>` | Stop after N items |
 
+### Google (page-token)
+
+| Flag | What it does |
+|------|-------------|
+| `--page-token <token>` | Resume from a Google `nextPageToken` |
+| `--all` | Auto-follow all pages |
+| `--max-items <n>` | Stop after N rows |
+
+Google `search` uses fixed-size API pages. Use `--page-token` to resume or `--all` to follow every page.
+
 ## Output
 
 - **stdout**: data-only JSON by default (just the array or object, no wrapper)
 - **stderr**: errors as JSON, warnings as plain text
 - **`--envelope`**: wraps stdout with `{ "data": ..., "meta": ..., "paging": ... }`
-- **Exit codes**: 0 = success, 1 = transport/internal, 2 = config/argument, 3 = Meta API error, 4 = TikTok API error
+- **Exit codes**: 0 = success, 1 = transport/internal, 2 = config/argument, 3 = Meta API error, 4 = TikTok API error, 5 = Google API error
 
 ## Token Permissions
 
@@ -148,10 +163,21 @@ Both are read-only — no write access is granted. If the user gets a "Missing P
 
 The user's `TIKTOK_ADS_ACCESS_TOKEN` is obtained through TikTok's OAuth flow and expires every 24 hours. Use `agent-ads tiktok auth refresh` to rotate. The `advertisers list` and `auth refresh` commands require app credentials (`TIKTOK_ADS_APP_ID` and `TIKTOK_ADS_APP_SECRET`).
 
+### Google
+
+Google Ads requires four credential pieces:
+
+| Credential | Source |
+|------------|--------|
+| Developer token | `agent-ads google auth set` or `GOOGLE_ADS_DEVELOPER_TOKEN` |
+| OAuth client ID | `agent-ads google auth set` or `GOOGLE_ADS_CLIENT_ID` |
+| OAuth client secret | `agent-ads google auth set` or `GOOGLE_ADS_CLIENT_SECRET` |
+| OAuth refresh token | `agent-ads google auth set` or `GOOGLE_ADS_REFRESH_TOKEN` |
+
 ## Auth Storage
 
-- Persistent auth: `agent-ads meta auth set` / `agent-ads tiktok auth set`
-- Shell override / CI fallback: `META_ADS_ACCESS_TOKEN=...` or `TIKTOK_ADS_ACCESS_TOKEN=...`
+- Persistent auth: `agent-ads meta auth set` / `agent-ads google auth set` / `agent-ads tiktok auth set`
+- Shell override / CI fallback: provider-specific env vars such as `META_ADS_ACCESS_TOKEN=...`, `GOOGLE_ADS_REFRESH_TOKEN=...`, or `TIKTOK_ADS_ACCESS_TOKEN=...`
 - Linux secure storage requires a running Secret Service provider such as GNOME Keyring or KWallet
 
 ## First-Time Setup
@@ -189,6 +215,19 @@ agent-ads tiktok advertisers list \
 ```
 
 TikTok tokens expire every 24 hours. If the doctor check fails with an auth error, refresh with `agent-ads tiktok auth refresh --app-id ... --app-secret ...`.
+
+### Google — first run
+
+```bash
+# 1. Store your Google Ads credentials
+agent-ads google auth set
+
+# 2. Verify everything works
+agent-ads google doctor --api
+
+# 3. List your accessible customers
+agent-ads google customers list
+```
 
 ## Worked Examples
 
@@ -285,15 +324,19 @@ When the provider is `tiktok`, read [references/tiktok.md](references/tiktok.md)
 
 Load only the reference file you need. Do not load all of them at once.
 
+## Google Routing
+
+When the provider is `google`, read [references/google.md](references/google.md) first.
+
 ## Common Issues
 
 | Problem | What's happening | Fix |
 |---------|-----------------|-----|
 | "My token expired" | Meta tokens can be short-lived; TikTok tokens expire every 24 hours | Meta: regenerate at [Graph API Explorer](https://developers.facebook.com/tools/explorer/) then `meta auth set`. TikTok: `tiktok auth refresh --app-id ... --app-secret ...` |
-| "I don't know my account ID" | You need to discover it first | Meta: `meta businesses list` → `meta ad-accounts list --business-id ...`. TikTok: `tiktok advertisers list --app-id ... --app-secret ...` |
+| "I don't know my account ID" | You need to discover it first | Meta: `meta businesses list` → `meta ad-accounts list --business-id ...`. Google: `google customers list`. TikTok: `tiktok advertisers list --app-id ... --app-secret ...` |
 | "Permission denied" | Token is missing required scopes | Meta: regenerate token with `ads_read` (and `business_management` for discovery). TikTok: check app permissions in TikTok developer portal |
 | "Command not found" | CLI not installed or not on PATH | Run `agent-ads --version`. If missing: `npm install -g agent-ads` |
-| "doctor says credential store unavailable" | No OS keychain on this machine (common on Linux servers) | Use shell env vars instead: `export META_ADS_ACCESS_TOKEN=...` or `export TIKTOK_ADS_ACCESS_TOKEN=...` |
+| "doctor says credential store unavailable" | No OS keychain on this machine (common on Linux servers) | Use shell env vars instead: `export META_ADS_ACCESS_TOKEN=...`, `export GOOGLE_ADS_REFRESH_TOKEN=...`, or `export TIKTOK_ADS_ACCESS_TOKEN=...` |
 | "TikTok says 'advertiser-id is required'" | Most TikTok commands need an advertiser ID | Add `--advertiser-id <id>`, or set `default_advertiser_id` in `agent-ads.config.json` under `providers.tiktok` |
 
 ## Stop Conditions
@@ -301,4 +344,4 @@ Load only the reference file you need. Do not load all of them at once.
 - Do not drop the provider prefix (`agent-ads meta ...`, not `agent-ads ...`).
 - Do not invent cross-provider abstractions (no shared campaign/report/measurement schema).
 - Do not reuse Meta auth env vars (`META_ADS_ACCESS_TOKEN`) for future providers.
-- Do not guess flag names — use `agent-ads meta <command> --help` to confirm.
+- Do not guess flag names — use `agent-ads <provider> <command> --help` to confirm.

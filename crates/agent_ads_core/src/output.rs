@@ -4,7 +4,6 @@ use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::client::Paging;
 use crate::error::{MetaAdsError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,7 +56,7 @@ pub struct OutputEnvelope {
     pub data: Value,
     pub meta: OutputMeta,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub paging: Option<Paging>,
+    pub paging: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warnings: Option<Vec<String>>,
 }

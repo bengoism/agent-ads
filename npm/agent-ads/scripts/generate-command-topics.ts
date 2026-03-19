@@ -128,10 +128,35 @@ const sections: Section[] = [
     language: "text"
   },
   {
-    title: "Google Placeholder",
-    intro: "Google is an explicit namespace, but it is not implemented yet.",
-    args: ["google"],
-    language: "json"
+    title: "Google Topic",
+    intro: "The Google provider covers read-only Google Ads and native GAQL access.",
+    args: ["google", "--help"],
+    language: "text"
+  },
+  {
+    title: "Google Customers",
+    args: ["google", "customers", "--help"],
+    language: "text"
+  },
+  {
+    title: "Google Campaigns",
+    args: ["google", "campaigns", "--help"],
+    language: "text"
+  },
+  {
+    title: "Google GAQL",
+    args: ["google", "gaql", "--help"],
+    language: "text"
+  },
+  {
+    title: "Google Auth",
+    args: ["google", "auth", "--help"],
+    language: "text"
+  },
+  {
+    title: "Google Config",
+    args: ["google", "config", "--help"],
+    language: "text"
   }
 ];
 

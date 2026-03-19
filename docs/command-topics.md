@@ -24,14 +24,14 @@ Usage: agent-ads [OPTIONS] <COMMAND>
 Commands:
   providers  Inspect available and planned ad providers
   meta       Meta (Facebook/Instagram) Marketing API commands
-  google     Google Ads provider namespace (not implemented yet)
+  google     Google Ads commands
   tiktok     TikTok Business API commands
   help       Print this message or the help of the given subcommand(s)
 
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -53,7 +53,7 @@ agent-ads providers list
 ```
 
 ```json
-[{"implemented":true,"provider":"meta","status":"available","summary":"Read-only Meta Marketing API support."},{"implemented":false,"provider":"google","status":"planned","summary":"Google Ads namespace is reserved but not implemented yet."},{"implemented":true,"provider":"tiktok","status":"available","summary":"Read-only TikTok Business API support."}]
+[{"implemented":true,"provider":"meta","status":"available","summary":"Read-only Meta Marketing API support."},{"implemented":true,"provider":"google","status":"available","summary":"Read-only Google Ads support with native GAQL."},{"implemented":true,"provider":"tiktok","status":"available","summary":"Read-only TikTok Business API support."}]
 ```
 
 ## Meta Topic
@@ -91,7 +91,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -121,7 +121,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -151,7 +151,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -181,7 +181,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -212,7 +212,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -245,7 +245,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -276,7 +276,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -306,7 +306,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -338,7 +338,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -370,7 +370,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -402,7 +402,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -445,7 +445,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -476,7 +476,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -506,7 +506,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -536,7 +536,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -568,7 +568,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -599,7 +599,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -632,7 +632,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -664,7 +664,7 @@ Commands:
 Options:
       --config <CONFIG>                    Config file path [default: agent-ads.config.json]
       --api-base-url <API_BASE_URL>        Override API base URL
-      --api-version <API_VERSION>          Override API version (e.g. v25.0)
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
       --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
       --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
       --output <OUTPUT>                    Write output to file (- for stdout)
@@ -676,14 +676,197 @@ Options:
   -h, --help                               Print help
 ```
 
-## Google Placeholder
+## Google Topic
 
-Google is an explicit namespace, but it is not implemented yet.
+The Google provider covers read-only Google Ads and native GAQL access.
 
 ```bash
-agent-ads google
+agent-ads google --help
 ```
 
-```json
-{"implemented":false,"message":"google commands are not implemented yet. Use `agent-ads providers list` to inspect available providers or `agent-ads meta ...` for the current implementation.","provider":"google"}
+```text
+Google Ads commands
+
+Usage: agent-ads google [OPTIONS] <COMMAND>
+
+Commands:
+  customers  List accessible customers and customer hierarchies
+  campaigns  List campaigns
+  adgroups   List ad groups
+  ads        List ads
+  gaql       Run Google Ads Query Language (GAQL) requests
+  auth       Manage stored Google Ads credentials
+  doctor     Verify auth, config, and API connectivity
+  config     Inspect and validate configuration
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Google Customers
+
+```bash
+agent-ads google customers --help
+```
+
+```text
+List accessible customers and customer hierarchies
+
+Usage: agent-ads google customers [OPTIONS] <COMMAND>
+
+Commands:
+  list       List customers accessible to your Google Ads credentials [aliases: ls]
+  hierarchy  List a customer hierarchy via customer_client GAQL
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Google Campaigns
+
+```bash
+agent-ads google campaigns --help
+```
+
+```text
+List campaigns
+
+Usage: agent-ads google campaigns [OPTIONS] <COMMAND>
+
+Commands:
+  list  List campaigns for a customer [aliases: ls]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Google GAQL
+
+```bash
+agent-ads google gaql --help
+```
+
+```text
+Run Google Ads Query Language (GAQL) requests
+
+Usage: agent-ads google gaql [OPTIONS] <COMMAND>
+
+Commands:
+  search         Run a paged GAQL search request
+  search-stream  Run a streamed GAQL search request
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Google Auth
+
+```bash
+agent-ads google auth --help
+```
+
+```text
+Manage stored Google Ads credentials
+
+Usage: agent-ads google auth [OPTIONS] <COMMAND>
+
+Commands:
+  set     Store Google Ads credentials in the OS credential store
+  status  Show auth source and secure storage status
+  delete  Delete stored Google Ads credentials
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## Google Config
+
+```bash
+agent-ads google config --help
+```
+
+```text
+Inspect and validate configuration
+
+Usage: agent-ads google config [OPTIONS] <COMMAND>
+
+Commands:
+  path      Show resolved config file path
+  show      Show full resolved configuration
+  validate  Validate config file
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```

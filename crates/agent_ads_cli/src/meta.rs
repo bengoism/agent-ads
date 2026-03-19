@@ -1196,7 +1196,7 @@ fn graph_result(
             report_run_id,
         },
     );
-    envelope.paging = response.paging;
+    envelope.paging = response.paging.map(|paging| json!(paging));
     if !warnings.is_empty() {
         envelope.warnings = Some(warnings);
     }

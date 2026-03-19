@@ -898,6 +898,7 @@ fn tiktok_result(
             report_run_id: None,
         },
     );
+    envelope.paging = response.page_info.map(|page_info| json!(page_info));
     if !warnings.is_empty() {
         envelope.warnings = Some(warnings);
     }

@@ -3,6 +3,15 @@ use keyring::{Entry, Error as KeyringError};
 pub const META_ACCESS_TOKEN_SERVICE: &str = "agent-ads";
 pub const META_ACCESS_TOKEN_ACCOUNT: &str = "meta-access-token";
 
+pub const GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE: &str = "agent-ads";
+pub const GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT: &str = "google-ads-developer-token";
+pub const GOOGLE_ADS_CLIENT_ID_SERVICE: &str = "agent-ads";
+pub const GOOGLE_ADS_CLIENT_ID_ACCOUNT: &str = "google-ads-client-id";
+pub const GOOGLE_ADS_CLIENT_SECRET_SERVICE: &str = "agent-ads";
+pub const GOOGLE_ADS_CLIENT_SECRET_ACCOUNT: &str = "google-ads-client-secret";
+pub const GOOGLE_ADS_REFRESH_TOKEN_SERVICE: &str = "agent-ads";
+pub const GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT: &str = "google-ads-refresh-token";
+
 pub const TIKTOK_ACCESS_TOKEN_SERVICE: &str = "agent-ads";
 pub const TIKTOK_ACCESS_TOKEN_ACCOUNT: &str = "tiktok-access-token";
 pub const TIKTOK_REFRESH_TOKEN_SERVICE: &str = "agent-ads";

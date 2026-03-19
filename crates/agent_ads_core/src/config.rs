@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{MetaAdsError, Result};
+use crate::google_config::GoogleFileConfig;
 use crate::output::OutputFormat;
 use crate::secret_store::{
     SecretStore, SecretStoreErrorKind, META_ACCESS_TOKEN_ACCOUNT, META_ACCESS_TOKEN_SERVICE,
@@ -30,6 +31,8 @@ pub struct FileConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProviderFileConfigs {
     pub meta: Option<FileConfig>,
+    #[serde(default)]
+    pub google: Option<GoogleFileConfig>,
     #[serde(default)]
     pub tiktok: Option<TikTokFileConfig>,
 }

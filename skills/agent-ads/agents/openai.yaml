@@ -1,7 +1,7 @@
 interface:
   display_name: "Agent Ads"
   short_description: "Provider-first ads CLI for agents"
-  default_prompt: "Use $agent-ads to inspect providers, run Meta and TikTok CLI commands, and keep provider actions explicit."
+  default_prompt: "Use $agent-ads to inspect providers, run Meta, Google, and TikTok CLI commands, and keep provider actions explicit."
 
 policy:
   allow_implicit_invocation: true
