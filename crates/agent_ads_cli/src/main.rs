@@ -3,22 +3,31 @@ mod meta;
 mod pinterest;
 mod tiktok;
 
-use std::env;
+use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use agent_ads_core::config::{inspect, ConfigOverrides, ResolvedConfig};
+use agent_ads_core::config::{
+    inspect, inspect_access_token, AccessTokenSource, AccessTokenStatus, ConfigOverrides,
+    ResolvedConfig,
+};
 use agent_ads_core::error::{GraphApiError, MetaAdsError};
-use agent_ads_core::google_config::GoogleConfigOverrides;
+use agent_ads_core::google_config::{
+    google_inspect_auth, GoogleAuthSnapshot, GoogleConfigOverrides, GoogleSecretStatus,
+};
 use agent_ads_core::google_error::{GoogleApiError, GoogleError};
 use agent_ads_core::output::{
     render_output, OutputEnvelope, OutputFormat, OutputMeta, RenderOptions,
 };
-use agent_ads_core::pinterest_config::PinterestConfigOverrides;
+use agent_ads_core::pinterest_config::{
+    pinterest_inspect_auth, PinterestAuthSnapshot, PinterestConfigOverrides, PinterestSecretStatus,
+};
 use agent_ads_core::pinterest_error::{PinterestApiError, PinterestError};
-use agent_ads_core::tiktok_config::TikTokConfigOverrides;
+use agent_ads_core::tiktok_config::{
+    tiktok_inspect_auth, TikTokAuthSnapshot, TikTokConfigOverrides, TikTokSecretStatus,
+};
 use agent_ads_core::tiktok_error::{TikTokApiError, TikTokError};
 use agent_ads_core::{
     google_inspect, pinterest_inspect, tiktok_inspect, GoogleClient, GoogleResolvedConfig,
@@ -26,6 +35,7 @@ use agent_ads_core::{
     TikTokResolvedConfig,
 };
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use dialoguer::{theme::ColorfulTheme, Select};
 use serde_json::{json, Value};
 use tracing_subscriber::EnvFilter;
 
@@ -33,8 +43,6 @@ use google::GoogleCommand;
 use meta::MetaCommand;
 use pinterest::PinterestCommand;
 use tiktok::TikTokCommand;
-
-const TIKTOK_REFRESH_TOKEN_ENV_VAR: &str = "TIKTOK_ADS_REFRESH_TOKEN";
 
 // ---------------------------------------------------------------------------
 // Shared arg structs (reused across providers)
@@ -126,6 +134,11 @@ enum Command {
         #[command(subcommand)]
         command: ProvidersCommand,
     },
+    #[command(about = "Inspect auth status and route into provider setup")]
+    Auth {
+        #[command(subcommand)]
+        command: Option<RootAuthCommand>,
+    },
     #[command(about = "Meta (Facebook/Instagram) Marketing API commands")]
     Meta {
         #[command(subcommand)]
@@ -154,6 +167,12 @@ enum ProvidersCommand {
     List,
 }
 
+#[derive(Subcommand, Debug)]
+enum RootAuthCommand {
+    #[command(about = "Show aggregated auth status across implemented providers")]
+    Status,
+}
+
 // ---------------------------------------------------------------------------
 // Shared output types
 // ---------------------------------------------------------------------------
@@ -173,6 +192,63 @@ struct OutputOptions {
     quiet: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RootAuthProvider {
+    Meta,
+    Google,
+    Tiktok,
+    Pinterest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+enum RootAuthState {
+    Configured,
+    Partial,
+    Missing,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct RootCredentialStatus {
+    env_var: &'static str,
+    credential_store_service: &'static str,
+    credential_store_account: &'static str,
+    present: bool,
+    source: String,
+    keychain_present: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct RootProviderAuthStatus {
+    provider: &'static str,
+    status: RootAuthState,
+    usable: bool,
+    configured_credentials: usize,
+    total_credentials: usize,
+    credential_store_available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credential_store_error: Option<String>,
+    credentials: BTreeMap<String, RootCredentialStatus>,
+}
+
+impl RootAuthProvider {
+    fn provider_name(self) -> &'static str {
+        match self {
+            Self::Meta => "meta",
+            Self::Google => "google",
+            Self::Tiktok => "tiktok",
+            Self::Pinterest => "pinterest",
+        }
+    }
+}
+
+const ROOT_AUTH_PROVIDER_ORDER: [RootAuthProvider; 4] = [
+    RootAuthProvider::Meta,
+    RootAuthProvider::Google,
+    RootAuthProvider::Tiktok,
+    RootAuthProvider::Pinterest,
+];
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -180,52 +256,77 @@ struct OutputOptions {
 #[tokio::main]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    let Cli {
+        config,
+        api_base_url,
+        api_version,
+        timeout_seconds,
+        format,
+        output,
+        pretty,
+        envelope,
+        include_meta,
+        quiet,
+        verbose,
+        command,
+    } = cli;
     let overrides = ConfigOverrides {
-        api_base_url: cli.api_base_url.clone(),
-        api_version: cli.api_version.clone(),
-        timeout_seconds: cli.timeout_seconds,
-        output_format: cli.format.map(Into::into),
+        api_base_url: api_base_url.clone(),
+        api_version: api_version.clone(),
+        timeout_seconds,
+        output_format: format.map(Into::into),
         ..ConfigOverrides::default()
     };
     let mut output_options = OutputOptions {
-        format: cli.format.map(Into::into).unwrap_or(OutputFormat::Json),
-        pretty: cli.pretty,
-        envelope: cli.envelope,
-        include_meta: cli.include_meta,
-        quiet: cli.quiet,
+        format: format.map(Into::into).unwrap_or(OutputFormat::Json),
+        pretty,
+        envelope,
+        include_meta,
+        quiet,
     };
     let secret_store = OsKeyringStore;
+    let explicit_output_shape =
+        format.is_some() || pretty || envelope || include_meta || output.is_some();
 
-    init_tracing(cli.verbose, cli.quiet);
+    init_tracing(verbose, quiet);
 
     let tiktok_overrides = TikTokConfigOverrides {
-        api_base_url: cli.api_base_url.clone(),
-        api_version: cli.api_version.clone(),
-        timeout_seconds: cli.timeout_seconds,
-        output_format: cli.format.map(Into::into),
+        api_base_url: api_base_url.clone(),
+        api_version: api_version.clone(),
+        timeout_seconds,
+        output_format: format.map(Into::into),
         ..TikTokConfigOverrides::default()
     };
     let google_overrides = GoogleConfigOverrides {
-        api_base_url: cli.api_base_url.clone(),
-        api_version: cli.api_version.clone(),
-        timeout_seconds: cli.timeout_seconds,
-        output_format: cli.format.map(Into::into),
+        api_base_url: api_base_url.clone(),
+        api_version: api_version.clone(),
+        timeout_seconds,
+        output_format: format.map(Into::into),
         ..GoogleConfigOverrides::default()
     };
     let pinterest_overrides = PinterestConfigOverrides {
-        api_base_url: cli.api_base_url.clone(),
-        api_version: cli.api_version.clone(),
-        timeout_seconds: cli.timeout_seconds,
-        output_format: cli.format.map(Into::into),
+        api_base_url: api_base_url.clone(),
+        api_version: api_version.clone(),
+        timeout_seconds,
+        output_format: format.map(Into::into),
         ..PinterestConfigOverrides::default()
     };
 
-    let result = match cli.command {
+    let result = match command {
         Command::Providers { command } => Ok(handle_providers(command)),
+        Command::Auth { command } => {
+            return handle_root_auth_command(
+                command,
+                &secret_store,
+                &output_options,
+                explicit_output_shape,
+                output.as_deref(),
+            );
+        }
         Command::Pinterest { command } => {
-            if cli.format.is_none() {
+            if format.is_none() {
                 output_options.format = match resolve_pinterest_output_format(
-                    cli.config.as_deref(),
+                    config.as_deref(),
                     &secret_store,
                     &pinterest_overrides,
                 ) {
@@ -248,7 +349,7 @@ async fn main() -> ExitCode {
             let pinterest_result = dispatch_pinterest(
                 command,
                 &secret_store,
-                cli.config.as_deref(),
+                config.as_deref(),
                 &pinterest_overrides,
             )
             .await;
@@ -270,9 +371,9 @@ async fn main() -> ExitCode {
             }
         }
         Command::Google { command } => {
-            if cli.format.is_none() {
+            if format.is_none() {
                 output_options.format = match resolve_google_output_format(
-                    cli.config.as_deref(),
+                    config.as_deref(),
                     &secret_store,
                     &google_overrides,
                 ) {
@@ -292,13 +393,8 @@ async fn main() -> ExitCode {
                     }
                 };
             }
-            let google_result = dispatch_google(
-                command,
-                &secret_store,
-                cli.config.as_deref(),
-                &google_overrides,
-            )
-            .await;
+            let google_result =
+                dispatch_google(command, &secret_store, config.as_deref(), &google_overrides).await;
             match google_result {
                 Ok(result) => Ok(result),
                 Err(google_err) => {
@@ -317,9 +413,9 @@ async fn main() -> ExitCode {
             }
         }
         Command::Tiktok { command } => {
-            if cli.format.is_none() {
+            if format.is_none() {
                 output_options.format = match resolve_tiktok_output_format(
-                    cli.config.as_deref(),
+                    config.as_deref(),
                     &secret_store,
                     &tiktok_overrides,
                 ) {
@@ -339,13 +435,8 @@ async fn main() -> ExitCode {
                     }
                 };
             }
-            let tiktok_result = dispatch_tiktok(
-                command,
-                &secret_store,
-                cli.config.as_deref(),
-                &tiktok_overrides,
-            )
-            .await;
+            let tiktok_result =
+                dispatch_tiktok(command, &secret_store, config.as_deref(), &tiktok_overrides).await;
             match tiktok_result {
                 Ok(result) => Ok(result),
                 Err(tiktok_err) => {
@@ -365,9 +456,9 @@ async fn main() -> ExitCode {
             }
         }
         Command::Meta { command } => {
-            if cli.format.is_none() {
+            if format.is_none() {
                 output_options.format = match resolve_meta_output_format(
-                    cli.config.as_deref(),
+                    config.as_deref(),
                     &secret_store,
                     &overrides,
                 ) {
@@ -378,19 +469,19 @@ async fn main() -> ExitCode {
             match command {
                 MetaCommand::Auth { command } => meta::handle_auth(command, &secret_store),
                 MetaCommand::Config { command } => {
-                    let snapshot = inspect(cli.config.as_deref(), &secret_store, &overrides);
+                    let snapshot = inspect(config.as_deref(), &secret_store, &overrides);
                     match snapshot {
                         Ok(snapshot) => meta::handle_config(command, snapshot),
                         Err(error) => Err(error),
                     }
                 }
                 MetaCommand::Doctor(args) => {
-                    let snapshot = inspect(cli.config.as_deref(), &secret_store, &overrides);
+                    let snapshot = inspect(config.as_deref(), &secret_store, &overrides);
                     match snapshot {
                         Ok(snapshot) => {
                             meta::handle_doctor(
                                 args,
-                                cli.config.as_deref(),
+                                config.as_deref(),
                                 &secret_store,
                                 &overrides,
                                 snapshot,
@@ -401,14 +492,11 @@ async fn main() -> ExitCode {
                     }
                 }
                 command => {
-                    let config = match ResolvedConfig::load(
-                        cli.config.as_deref(),
-                        &secret_store,
-                        &overrides,
-                    ) {
-                        Ok(config) => config,
-                        Err(error) => return exit_with_error(&error, &output_options),
-                    };
+                    let config =
+                        match ResolvedConfig::load(config.as_deref(), &secret_store, &overrides) {
+                            Ok(config) => config,
+                            Err(error) => return exit_with_error(&error, &output_options),
+                        };
                     let client = match GraphClient::from_config(&config) {
                         Ok(client) => client,
                         Err(error) => return exit_with_error(&error, &output_options),
@@ -420,7 +508,7 @@ async fn main() -> ExitCode {
     };
 
     match result {
-        Ok(result) => emit_result(result, &output_options, cli.output.as_deref()),
+        Ok(result) => emit_result(result, &output_options, output.as_deref()),
         Err(error) => exit_with_error(&error, &output_options),
     }
 }
@@ -437,14 +525,14 @@ async fn dispatch_tiktok(
 ) -> Result<CommandResult, TikTokError> {
     match command {
         TikTokCommand::Auth { command } => match command {
-            tiktok::AuthCommand::Refresh(ref args) => {
+            tiktok::AuthCommand::Refresh(args) => {
                 let snapshot =
                     agent_ads_core::tiktok_inspect(config_path, secret_store, overrides)?;
-                let refresh_token = resolve_tiktok_refresh_token(secret_store)?;
+                let refresh_auth = tiktok::resolve_auth_refresh_inputs(&args, secret_store)?;
                 tiktok::handle_auth_refresh(
-                    &args.app_id,
-                    &args.app_secret,
-                    &refresh_token,
+                    &refresh_auth.app_id,
+                    &refresh_auth.app_secret,
+                    &refresh_auth.refresh_token,
                     secret_store,
                     &snapshot,
                 )
@@ -634,6 +722,567 @@ fn pinterest_error_payload(error: &PinterestError) -> Value {
     }
 }
 
+fn handle_root_auth_command(
+    command: Option<RootAuthCommand>,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    output_options: &OutputOptions,
+    explicit_output_shape: bool,
+    output_path: Option<&Path>,
+) -> ExitCode {
+    match command {
+        Some(RootAuthCommand::Status) => emit_result(
+            root_auth_status_result(secret_store),
+            output_options,
+            output_path,
+        ),
+        None if should_run_interactive_root_auth(explicit_output_shape, output_path) => {
+            run_interactive_root_auth(secret_store, output_options)
+        }
+        None => emit_result(
+            root_auth_status_result(secret_store),
+            output_options,
+            output_path,
+        ),
+    }
+}
+
+fn should_run_interactive_root_auth(
+    explicit_output_shape: bool,
+    output_path: Option<&Path>,
+) -> bool {
+    !explicit_output_shape
+        && output_path.is_none()
+        && io::stdin().is_terminal()
+        && io::stdout().is_terminal()
+        && io::stderr().is_terminal()
+}
+
+fn run_interactive_root_auth(
+    secret_store: &dyn agent_ads_core::SecretStore,
+    output_options: &OutputOptions,
+) -> ExitCode {
+    let summaries = build_runtime_root_auth_status(secret_store);
+    match select_root_auth_provider(&summaries) {
+        Ok(Some(provider)) => run_root_auth_setup(provider, secret_store, output_options),
+        Ok(None) => ExitCode::SUCCESS,
+        Err(error) => {
+            let mut stderr = io::stderr();
+            if writeln!(
+                &mut stderr,
+                "warning: interactive picker unavailable, falling back to numeric selection: {error}"
+            )
+            .is_err()
+            {
+                return exit_with_error(
+                    &MetaAdsError::Config(
+                        "interactive picker failed and the fallback warning could not be written"
+                            .to_string(),
+                    ),
+                    output_options,
+                );
+            }
+
+            match run_root_auth_numeric_prompt(&summaries) {
+                Ok(Some(provider)) => run_root_auth_setup(provider, secret_store, output_options),
+                Ok(None) => ExitCode::SUCCESS,
+                Err(error) => exit_with_error(&MetaAdsError::Io(error), output_options),
+            }
+        }
+    }
+}
+
+fn select_root_auth_provider(
+    summaries: &[RootProviderAuthStatus],
+) -> Result<Option<RootAuthProvider>, dialoguer::Error> {
+    let items = root_auth_menu_items(summaries);
+    let selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("Select provider to configure")
+        .items(&items)
+        .default(0)
+        .report(false)
+        .interact_opt()?;
+
+    Ok(selection.map(|index| ROOT_AUTH_PROVIDER_ORDER[index]))
+}
+
+fn run_root_auth_numeric_prompt(
+    summaries: &[RootProviderAuthStatus],
+) -> io::Result<Option<RootAuthProvider>> {
+    let mut stderr = io::stderr();
+    render_root_auth_summary(summaries, &mut stderr)?;
+
+    loop {
+        write!(
+            &mut stderr,
+            "Select provider to configure [1-{}, q to cancel]: ",
+            summaries.len()
+        )?;
+        stderr.flush()?;
+
+        let mut input = String::new();
+        match io::stdin().read_line(&mut input)? {
+            0 => return Ok(None),
+            _ => {}
+        }
+
+        match parse_root_auth_selection(&input, summaries.len()) {
+            Ok(Some(index)) => return Ok(Some(ROOT_AUTH_PROVIDER_ORDER[index])),
+            Ok(None) => return Ok(None),
+            Err(message) => writeln!(&mut stderr, "{message}")?,
+        }
+    }
+}
+
+fn render_root_auth_summary(
+    summaries: &[RootProviderAuthStatus],
+    writer: &mut impl Write,
+) -> io::Result<()> {
+    writeln!(writer, "Auth status:")?;
+    for (index, summary) in summaries.iter().enumerate() {
+        writeln!(
+            writer,
+            "  [{}] {}",
+            index + 1,
+            root_auth_menu_label(summary)
+        )?;
+    }
+    Ok(())
+}
+
+fn root_auth_menu_items(summaries: &[RootProviderAuthStatus]) -> Vec<String> {
+    summaries.iter().map(root_auth_menu_label).collect()
+}
+
+fn root_auth_menu_label(summary: &RootProviderAuthStatus) -> String {
+    let usability = if summary.usable {
+        "usable"
+    } else {
+        "not usable"
+    };
+
+    format!(
+        "{:<10} {:<10} {}/{} credentials {}",
+        summary.provider,
+        root_auth_state_label(summary.status),
+        summary.configured_credentials,
+        summary.total_credentials,
+        usability,
+    )
+}
+
+fn parse_root_auth_selection(
+    input: &str,
+    provider_count: usize,
+) -> Result<Option<usize>, &'static str> {
+    let trimmed = input.trim();
+    if trimmed.is_empty()
+        || trimmed.eq_ignore_ascii_case("q")
+        || trimmed.eq_ignore_ascii_case("quit")
+        || trimmed.eq_ignore_ascii_case("exit")
+    {
+        return Ok(None);
+    }
+
+    match trimmed.parse::<usize>() {
+        Ok(selection) if (1..=provider_count).contains(&selection) => Ok(Some(selection - 1)),
+        _ => Err("Invalid selection. Enter a provider number or q to cancel."),
+    }
+}
+
+fn run_root_auth_setup(
+    provider: RootAuthProvider,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    output_options: &OutputOptions,
+) -> ExitCode {
+    match provider {
+        RootAuthProvider::Meta => match meta::handle_auth(
+            meta::AuthCommand::Set(meta::AuthSetArgs { stdin: false }),
+            secret_store,
+        ) {
+            Ok(result) => emit_result(result, output_options, None),
+            Err(error) => exit_with_error(&error, output_options),
+        },
+        RootAuthProvider::Google => match google::handle_auth(
+            google::AuthCommand::Set(google::AuthSetArgs {
+                stdin: false,
+                developer_token: None,
+                client_id: None,
+                client_secret: None,
+                refresh_token: None,
+            }),
+            secret_store,
+        ) {
+            Ok(result) => emit_result(result, output_options, None),
+            Err(error) => exit_with_google_error(&error, output_options),
+        },
+        RootAuthProvider::Tiktok => match tiktok::handle_auth(
+            tiktok::AuthCommand::Set(tiktok::AuthSetArgs {
+                stdin: false,
+                refresh_token: false,
+                full: true,
+            }),
+            secret_store,
+        ) {
+            Ok(result) => emit_result(result, output_options, None),
+            Err(error) => exit_with_tiktok_error(&error, output_options),
+        },
+        RootAuthProvider::Pinterest => match pinterest::handle_auth(
+            pinterest::AuthCommand::Set(pinterest::AuthSetArgs {
+                stdin: false,
+                app_id: None,
+                app_secret: None,
+                access_token: None,
+                refresh_token: None,
+            }),
+            secret_store,
+        ) {
+            Ok(result) => emit_result(result, output_options, None),
+            Err(error) => exit_with_pinterest_error(&error, output_options),
+        },
+    }
+}
+
+fn root_auth_status_result(secret_store: &dyn agent_ads_core::SecretStore) -> CommandResult {
+    static_command_result(
+        json!({
+            "providers": build_runtime_root_auth_status(secret_store)
+        }),
+        "/auth/status",
+        0,
+    )
+}
+
+#[cfg(test)]
+fn build_root_auth_status(
+    secret_store: &dyn agent_ads_core::SecretStore,
+) -> Vec<RootProviderAuthStatus> {
+    vec![
+        build_meta_root_auth_status(inspect_access_token(secret_store)),
+        build_google_root_auth_status(google_inspect_auth(secret_store)),
+        build_tiktok_root_auth_status(tiktok_inspect_auth(secret_store)),
+        build_pinterest_root_auth_status(pinterest_inspect_auth(secret_store)),
+    ]
+}
+
+fn build_runtime_root_auth_status(
+    secret_store: &dyn agent_ads_core::SecretStore,
+) -> Vec<RootProviderAuthStatus> {
+    vec![
+        build_meta_root_auth_status(inspect_meta_access_token_with_timeout()),
+        build_google_root_auth_status(google_inspect_auth(secret_store)),
+        build_tiktok_root_auth_status(tiktok_inspect_auth(secret_store)),
+        build_pinterest_root_auth_status(pinterest_inspect_auth(secret_store)),
+    ]
+}
+
+fn inspect_meta_access_token_with_timeout() -> AccessTokenStatus {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let status = inspect_access_token(&OsKeyringStore);
+        let _ = sender.send(status);
+    });
+
+    match receiver.recv_timeout(std::time::Duration::from_secs(2)) {
+        Ok(status) => status,
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => AccessTokenStatus {
+            access_token_present: false,
+            access_token_source: AccessTokenSource::Missing,
+            credential_store_available: false,
+            keychain_token_present: false,
+            credential_store_error: Some(
+                "timed out while reading the Meta credential store entry".to_string(),
+            ),
+        },
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => AccessTokenStatus {
+            access_token_present: false,
+            access_token_source: AccessTokenSource::Missing,
+            credential_store_available: false,
+            keychain_token_present: false,
+            credential_store_error: Some(
+                "failed to read the Meta credential store entry".to_string(),
+            ),
+        },
+    }
+}
+
+fn build_meta_root_auth_status(status: AccessTokenStatus) -> RootProviderAuthStatus {
+    provider_auth_summary(
+        RootAuthProvider::Meta,
+        status.access_token_present,
+        status.credential_store_available,
+        status.credential_store_error,
+        [(
+            "access_token".to_string(),
+            credential_status(
+                "META_ADS_ACCESS_TOKEN",
+                agent_ads_core::META_ACCESS_TOKEN_SERVICE,
+                agent_ads_core::META_ACCESS_TOKEN_ACCOUNT,
+                status.access_token_present,
+                &status.access_token_source,
+                status.keychain_token_present,
+            ),
+        )],
+    )
+}
+
+fn build_google_root_auth_status(snapshot: GoogleAuthSnapshot) -> RootProviderAuthStatus {
+    let usable = snapshot.developer_token.present
+        && snapshot.client_id.present
+        && snapshot.client_secret.present
+        && snapshot.refresh_token.present;
+    provider_auth_summary(
+        RootAuthProvider::Google,
+        usable,
+        snapshot.credential_store_available,
+        snapshot.credential_store_error,
+        [
+            (
+                "developer_token".to_string(),
+                credential_status(
+                    "GOOGLE_ADS_DEVELOPER_TOKEN",
+                    agent_ads_core::GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE,
+                    agent_ads_core::GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT,
+                    snapshot.developer_token.present,
+                    &snapshot.developer_token.source,
+                    snapshot.developer_token.keychain_present,
+                ),
+            ),
+            (
+                "client_id".to_string(),
+                google_root_credential(
+                    "GOOGLE_ADS_CLIENT_ID",
+                    agent_ads_core::GOOGLE_ADS_CLIENT_ID_SERVICE,
+                    agent_ads_core::GOOGLE_ADS_CLIENT_ID_ACCOUNT,
+                    &snapshot.client_id,
+                ),
+            ),
+            (
+                "client_secret".to_string(),
+                google_root_credential(
+                    "GOOGLE_ADS_CLIENT_SECRET",
+                    agent_ads_core::GOOGLE_ADS_CLIENT_SECRET_SERVICE,
+                    agent_ads_core::GOOGLE_ADS_CLIENT_SECRET_ACCOUNT,
+                    &snapshot.client_secret,
+                ),
+            ),
+            (
+                "refresh_token".to_string(),
+                google_root_credential(
+                    "GOOGLE_ADS_REFRESH_TOKEN",
+                    agent_ads_core::GOOGLE_ADS_REFRESH_TOKEN_SERVICE,
+                    agent_ads_core::GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT,
+                    &snapshot.refresh_token,
+                ),
+            ),
+        ],
+    )
+}
+
+fn build_tiktok_root_auth_status(snapshot: TikTokAuthSnapshot) -> RootProviderAuthStatus {
+    provider_auth_summary(
+        RootAuthProvider::Tiktok,
+        snapshot.access_token.present,
+        snapshot.credential_store_available,
+        snapshot.credential_store_error,
+        [
+            (
+                "app_id".to_string(),
+                tiktok_root_credential(
+                    agent_ads_core::TIKTOK_ADS_APP_ID_ENV_VAR,
+                    agent_ads_core::TIKTOK_APP_ID_SERVICE,
+                    agent_ads_core::TIKTOK_APP_ID_ACCOUNT,
+                    &snapshot.app_id,
+                ),
+            ),
+            (
+                "app_secret".to_string(),
+                tiktok_root_credential(
+                    agent_ads_core::TIKTOK_ADS_APP_SECRET_ENV_VAR,
+                    agent_ads_core::TIKTOK_APP_SECRET_SERVICE,
+                    agent_ads_core::TIKTOK_APP_SECRET_ACCOUNT,
+                    &snapshot.app_secret,
+                ),
+            ),
+            (
+                "access_token".to_string(),
+                tiktok_root_credential(
+                    agent_ads_core::TIKTOK_ADS_ACCESS_TOKEN_ENV_VAR,
+                    agent_ads_core::TIKTOK_ACCESS_TOKEN_SERVICE,
+                    agent_ads_core::TIKTOK_ACCESS_TOKEN_ACCOUNT,
+                    &snapshot.access_token,
+                ),
+            ),
+            (
+                "refresh_token".to_string(),
+                tiktok_root_credential(
+                    agent_ads_core::TIKTOK_ADS_REFRESH_TOKEN_ENV_VAR,
+                    agent_ads_core::TIKTOK_REFRESH_TOKEN_SERVICE,
+                    agent_ads_core::TIKTOK_REFRESH_TOKEN_ACCOUNT,
+                    &snapshot.refresh_token,
+                ),
+            ),
+        ],
+    )
+}
+
+fn build_pinterest_root_auth_status(snapshot: PinterestAuthSnapshot) -> RootProviderAuthStatus {
+    provider_auth_summary(
+        RootAuthProvider::Pinterest,
+        snapshot.access_token.present,
+        snapshot.credential_store_available,
+        snapshot.credential_store_error,
+        [
+            (
+                "app_id".to_string(),
+                pinterest_root_credential(
+                    "PINTEREST_ADS_APP_ID",
+                    agent_ads_core::PINTEREST_ADS_APP_ID_SERVICE,
+                    agent_ads_core::PINTEREST_ADS_APP_ID_ACCOUNT,
+                    &snapshot.app_id,
+                ),
+            ),
+            (
+                "app_secret".to_string(),
+                pinterest_root_credential(
+                    "PINTEREST_ADS_APP_SECRET",
+                    agent_ads_core::PINTEREST_ADS_APP_SECRET_SERVICE,
+                    agent_ads_core::PINTEREST_ADS_APP_SECRET_ACCOUNT,
+                    &snapshot.app_secret,
+                ),
+            ),
+            (
+                "access_token".to_string(),
+                pinterest_root_credential(
+                    "PINTEREST_ADS_ACCESS_TOKEN",
+                    agent_ads_core::PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
+                    agent_ads_core::PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
+                    &snapshot.access_token,
+                ),
+            ),
+            (
+                "refresh_token".to_string(),
+                pinterest_root_credential(
+                    "PINTEREST_ADS_REFRESH_TOKEN",
+                    agent_ads_core::PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
+                    agent_ads_core::PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
+                    &snapshot.refresh_token,
+                ),
+            ),
+        ],
+    )
+}
+
+fn provider_auth_summary(
+    provider: RootAuthProvider,
+    usable: bool,
+    credential_store_available: bool,
+    credential_store_error: Option<String>,
+    credentials: impl IntoIterator<Item = (String, RootCredentialStatus)>,
+) -> RootProviderAuthStatus {
+    let credentials: BTreeMap<String, RootCredentialStatus> = credentials.into_iter().collect();
+    let configured_credentials = credentials.values().filter(|status| status.present).count();
+    let total_credentials = credentials.len();
+    let status = if configured_credentials == 0 {
+        RootAuthState::Missing
+    } else if configured_credentials == total_credentials {
+        RootAuthState::Configured
+    } else {
+        RootAuthState::Partial
+    };
+
+    RootProviderAuthStatus {
+        provider: provider.provider_name(),
+        status,
+        usable,
+        configured_credentials,
+        total_credentials,
+        credential_store_available,
+        credential_store_error,
+        credentials,
+    }
+}
+
+fn credential_status(
+    env_var: &'static str,
+    credential_store_service: &'static str,
+    credential_store_account: &'static str,
+    present: bool,
+    source: &impl serde::Serialize,
+    keychain_present: bool,
+) -> RootCredentialStatus {
+    RootCredentialStatus {
+        env_var,
+        credential_store_service,
+        credential_store_account,
+        present,
+        source: serialized_source_name(source),
+        keychain_present,
+    }
+}
+
+fn google_root_credential(
+    env_var: &'static str,
+    credential_store_service: &'static str,
+    credential_store_account: &'static str,
+    status: &GoogleSecretStatus,
+) -> RootCredentialStatus {
+    credential_status(
+        env_var,
+        credential_store_service,
+        credential_store_account,
+        status.present,
+        &status.source,
+        status.keychain_present,
+    )
+}
+
+fn tiktok_root_credential(
+    env_var: &'static str,
+    credential_store_service: &'static str,
+    credential_store_account: &'static str,
+    status: &TikTokSecretStatus,
+) -> RootCredentialStatus {
+    credential_status(
+        env_var,
+        credential_store_service,
+        credential_store_account,
+        status.present,
+        &status.source,
+        status.keychain_present,
+    )
+}
+
+fn pinterest_root_credential(
+    env_var: &'static str,
+    credential_store_service: &'static str,
+    credential_store_account: &'static str,
+    status: &PinterestSecretStatus,
+) -> RootCredentialStatus {
+    credential_status(
+        env_var,
+        credential_store_service,
+        credential_store_account,
+        status.present,
+        &status.source,
+        status.keychain_present,
+    )
+}
+
+fn serialized_source_name(source: &impl serde::Serialize) -> String {
+    serde_json::to_value(source)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn root_auth_state_label(state: RootAuthState) -> &'static str {
+    match state {
+        RootAuthState::Configured => "configured",
+        RootAuthState::Partial => "partial",
+        RootAuthState::Missing => "missing",
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Providers
 // ---------------------------------------------------------------------------
@@ -727,31 +1376,6 @@ pub fn read_input(path: &Path) -> Result<String, MetaAdsError> {
     }
 }
 
-fn resolve_tiktok_refresh_token(
-    secret_store: &dyn agent_ads_core::SecretStore,
-) -> Result<String, TikTokError> {
-    if let Some(refresh_token) = env::var(TIKTOK_REFRESH_TOKEN_ENV_VAR)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    {
-        return Ok(refresh_token);
-    }
-
-    match secret_store.get_secret(
-        agent_ads_core::TIKTOK_REFRESH_TOKEN_SERVICE,
-        agent_ads_core::TIKTOK_REFRESH_TOKEN_ACCOUNT,
-    ) {
-        Ok(Some(refresh_token)) => Ok(refresh_token),
-        Ok(None) => Err(TikTokError::Config(format!(
-            "{TIKTOK_REFRESH_TOKEN_ENV_VAR} is missing and no refresh token was found in the OS credential store. Export {TIKTOK_REFRESH_TOKEN_ENV_VAR} or run `agent-ads tiktok auth set --refresh-token` first."
-        ))),
-        Err(error) => Err(TikTokError::Config(format!(
-            "{TIKTOK_REFRESH_TOKEN_ENV_VAR} is missing and the OS credential store could not be read: {error}. Export {TIKTOK_REFRESH_TOKEN_ENV_VAR} or run `agent-ads tiktok auth set --refresh-token` first."
-        ))),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Output and error rendering
 // ---------------------------------------------------------------------------
@@ -797,6 +1421,34 @@ fn emit_result(
 
 fn exit_with_error(error: &MetaAdsError, options: &OutputOptions) -> ExitCode {
     let payload = error_payload(error);
+    render_error_payload(payload, options, error.exit_code() as u8)
+}
+
+fn exit_with_google_error(error: &GoogleError, options: &OutputOptions) -> ExitCode {
+    render_error_payload(
+        google_error_payload(error),
+        options,
+        error.exit_code() as u8,
+    )
+}
+
+fn exit_with_tiktok_error(error: &TikTokError, options: &OutputOptions) -> ExitCode {
+    render_error_payload(
+        tiktok_error_payload(error),
+        options,
+        error.exit_code() as u8,
+    )
+}
+
+fn exit_with_pinterest_error(error: &PinterestError, options: &OutputOptions) -> ExitCode {
+    render_error_payload(
+        pinterest_error_payload(error),
+        options,
+        error.exit_code() as u8,
+    )
+}
+
+fn render_error_payload(payload: Value, options: &OutputOptions, exit_code: u8) -> ExitCode {
     let rendered = if options.pretty {
         serde_json::to_string_pretty(&payload)
     } else {
@@ -804,7 +1456,7 @@ fn exit_with_error(error: &MetaAdsError, options: &OutputOptions) -> ExitCode {
     }
     .unwrap_or_else(|_| "{\"error\":{\"message\":\"failed to serialize error\"}}".to_string());
     eprintln!("{rendered}");
-    ExitCode::from(error.exit_code() as u8)
+    ExitCode::from(exit_code)
 }
 
 fn error_payload(error: &MetaAdsError) -> Value {
@@ -873,13 +1525,15 @@ mod tests {
     use agent_ads_core::google_config::GoogleConfigOverrides;
     use agent_ads_core::output::OutputFormat;
     use agent_ads_core::pinterest_config::PinterestConfigOverrides;
-    use agent_ads_core::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
+    use agent_ads_core::secret_store::{SecretStore, SecretStoreError};
     use clap::{Command, CommandFactory, Parser};
+    use std::path::Path;
     use tempfile::tempdir;
 
     use super::{
-        resolve_google_output_format, resolve_pinterest_output_format,
-        resolve_tiktok_refresh_token, Cli, TIKTOK_REFRESH_TOKEN_ENV_VAR,
+        build_root_auth_status, parse_root_auth_selection, resolve_google_output_format,
+        resolve_pinterest_output_format, root_auth_menu_items, should_run_interactive_root_auth,
+        Cli, RootAuthState,
     };
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -890,23 +1544,7 @@ mod tests {
         get_error: Mutex<Option<SecretStoreError>>,
     }
 
-    impl FakeSecretStore {
-        fn with_tiktok_refresh_token(refresh_token: &str) -> Self {
-            let store = Self::default();
-            store.secrets.lock().unwrap().insert(
-                (
-                    agent_ads_core::TIKTOK_REFRESH_TOKEN_SERVICE.to_string(),
-                    agent_ads_core::TIKTOK_REFRESH_TOKEN_ACCOUNT.to_string(),
-                ),
-                refresh_token.to_string(),
-            );
-            store
-        }
-
-        fn set_get_error(&self, error: SecretStoreError) {
-            *self.get_error.lock().unwrap() = Some(error);
-        }
-    }
+    impl FakeSecretStore {}
 
     impl SecretStore for FakeSecretStore {
         fn get_secret(
@@ -988,11 +1626,75 @@ mod tests {
     fn root_help_lists_provider_topics() {
         let help = render_help(&mut Cli::command());
         assert!(!help.contains("--env-file"));
+        assert!(help.contains("auth"));
         assert!(help.contains("providers"));
         assert!(help.contains("meta"));
         assert!(help.contains("google"));
         assert!(help.contains("tiktok"));
         assert!(help.contains("pinterest"));
+    }
+
+    #[test]
+    fn parses_root_auth_command() {
+        let cli = Cli::try_parse_from(["agent-ads", "auth"]).unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Auth"));
+    }
+
+    #[test]
+    fn parses_root_auth_status_command() {
+        let cli = Cli::try_parse_from(["agent-ads", "auth", "status"]).unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Status"));
+    }
+
+    #[test]
+    fn root_auth_selection_parses_cancel_and_index() {
+        assert_eq!(parse_root_auth_selection("q", 4).unwrap(), None);
+        assert_eq!(parse_root_auth_selection("2", 4).unwrap(), Some(1));
+        assert!(parse_root_auth_selection("9", 4).is_err());
+    }
+
+    #[test]
+    fn root_auth_is_not_interactive_when_output_is_shaped() {
+        assert!(!should_run_interactive_root_auth(true, None));
+        assert!(!should_run_interactive_root_auth(
+            false,
+            Some(Path::new("out.json"))
+        ));
+    }
+
+    #[test]
+    fn root_auth_status_classifies_provider_states() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::set_var("META_ADS_ACCESS_TOKEN", "meta-token");
+        env::set_var("GOOGLE_ADS_CLIENT_ID", "google-client-id");
+        let store = FakeSecretStore::default();
+
+        let summaries = build_root_auth_status(&store);
+
+        assert_eq!(summaries[0].provider, "meta");
+        assert_eq!(summaries[0].status, RootAuthState::Configured);
+        assert!(summaries[0].usable);
+        assert_eq!(summaries[1].provider, "google");
+        assert_eq!(summaries[1].status, RootAuthState::Partial);
+        assert!(!summaries[1].usable);
+
+        env::remove_var("META_ADS_ACCESS_TOKEN");
+        env::remove_var("GOOGLE_ADS_CLIENT_ID");
+    }
+
+    #[test]
+    fn root_auth_menu_items_include_status_details() {
+        let store = FakeSecretStore::default();
+        let summaries = build_root_auth_status(&store);
+        let items = root_auth_menu_items(&summaries);
+
+        assert_eq!(items.len(), 4);
+        assert!(items[0].contains("meta"));
+        assert!(items[0].contains("0/1"));
+        assert!(items[1].contains("google"));
+        assert!(items[1].contains("0/4"));
     }
 
     #[test]
@@ -1269,9 +1971,10 @@ mod tests {
     }
 
     #[test]
-    fn tiktok_auth_refresh_requires_app_credentials() {
-        let result = Cli::try_parse_from(["agent-ads", "tiktok", "auth", "refresh"]);
-        assert!(result.is_err());
+    fn tiktok_auth_refresh_parses_without_inline_app_credentials() {
+        let cli = Cli::try_parse_from(["agent-ads", "tiktok", "auth", "refresh"]).unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Refresh"));
     }
 
     #[test]
@@ -1386,46 +2089,6 @@ mod tests {
         .unwrap();
         let debug = format!("{cli:?}");
         assert!(debug.contains("Campaigns"));
-    }
-
-    #[test]
-    fn tiktok_refresh_token_prefers_shell_env_over_secret_store() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var(TIKTOK_REFRESH_TOKEN_ENV_VAR, "env-refresh-token");
-        let store = FakeSecretStore::with_tiktok_refresh_token("stored-refresh-token");
-
-        let refresh_token = resolve_tiktok_refresh_token(&store).unwrap();
-
-        assert_eq!(refresh_token, "env-refresh-token");
-        env::remove_var(TIKTOK_REFRESH_TOKEN_ENV_VAR);
-    }
-
-    #[test]
-    fn tiktok_refresh_token_falls_back_to_secret_store() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        env::remove_var(TIKTOK_REFRESH_TOKEN_ENV_VAR);
-        let store = FakeSecretStore::with_tiktok_refresh_token("stored-refresh-token");
-
-        let refresh_token = resolve_tiktok_refresh_token(&store).unwrap();
-
-        assert_eq!(refresh_token, "stored-refresh-token");
-    }
-
-    #[test]
-    fn tiktok_refresh_token_reports_store_errors_when_env_missing() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        env::remove_var(TIKTOK_REFRESH_TOKEN_ENV_VAR);
-        let store = FakeSecretStore::default();
-        store.set_get_error(SecretStoreError::new(
-            SecretStoreErrorKind::Unavailable,
-            "secure storage backend is unavailable".to_string(),
-        ));
-
-        let error = resolve_tiktok_refresh_token(&store).unwrap_err();
-
-        assert!(error
-            .to_string()
-            .contains("secure storage backend is unavailable"));
     }
 
     #[test]

@@ -57,13 +57,16 @@ pub use secret_store::{
     PINTEREST_ADS_APP_ID_ACCOUNT, PINTEREST_ADS_APP_ID_SERVICE, PINTEREST_ADS_APP_SECRET_ACCOUNT,
     PINTEREST_ADS_APP_SECRET_SERVICE, PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
     PINTEREST_ADS_REFRESH_TOKEN_SERVICE, TIKTOK_ACCESS_TOKEN_ACCOUNT, TIKTOK_ACCESS_TOKEN_SERVICE,
-    TIKTOK_REFRESH_TOKEN_ACCOUNT, TIKTOK_REFRESH_TOKEN_SERVICE,
+    TIKTOK_APP_ID_ACCOUNT, TIKTOK_APP_ID_SERVICE, TIKTOK_APP_SECRET_ACCOUNT,
+    TIKTOK_APP_SECRET_SERVICE, TIKTOK_REFRESH_TOKEN_ACCOUNT, TIKTOK_REFRESH_TOKEN_SERVICE,
 };
 
 pub use tiktok_client::{TikTokClient, TikTokPageInfo, TikTokResponse};
 pub use tiktok_config::{
-    tiktok_inspect, tiktok_inspect_access_token, TikTokAccessTokenSource, TikTokAccessTokenStatus,
-    TikTokConfigOverrides, TikTokConfigSnapshot, TikTokResolvedConfig, TIKTOK_DEFAULT_API_BASE_URL,
-    TIKTOK_DEFAULT_API_VERSION,
+    tiktok_inspect, tiktok_inspect_access_token, tiktok_inspect_auth, TikTokAccessTokenSource,
+    TikTokAccessTokenStatus, TikTokAuthSnapshot, TikTokConfigOverrides, TikTokConfigSnapshot,
+    TikTokResolvedConfig, TikTokSecretSource, TikTokSecretStatus, TIKTOK_ADS_ACCESS_TOKEN_ENV_VAR,
+    TIKTOK_ADS_APP_ID_ENV_VAR, TIKTOK_ADS_APP_SECRET_ENV_VAR, TIKTOK_ADS_REFRESH_TOKEN_ENV_VAR,
+    TIKTOK_DEFAULT_API_BASE_URL, TIKTOK_DEFAULT_API_VERSION,
 };
 pub use tiktok_error::{TikTokApiError, TikTokError, TikTokResult};

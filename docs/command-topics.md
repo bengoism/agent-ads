@@ -23,6 +23,7 @@ Usage: agent-ads [OPTIONS] <COMMAND>
 
 Commands:
   providers  Inspect available and planned ad providers
+  auth       Inspect auth status and route into provider setup
   meta       Meta (Facebook/Instagram) Marketing API commands
   google     Google Ads commands
   tiktok     TikTok Business API commands
@@ -55,6 +56,38 @@ agent-ads providers list
 
 ```json
 [{"implemented":true,"provider":"meta","status":"available","summary":"Read-only Meta Marketing API support."},{"implemented":true,"provider":"google","status":"available","summary":"Read-only Google Ads support with native GAQL."},{"implemented":true,"provider":"tiktok","status":"available","summary":"Read-only TikTok Business API support."},{"implemented":true,"provider":"pinterest","status":"available","summary":"Read-only Pinterest Ads API support."}]
+```
+
+## Root Auth
+
+Inspect aggregated auth status or launch guided local setup.
+
+```bash
+agent-ads auth --help
+```
+
+```text
+Inspect auth status and route into provider setup
+
+Usage: agent-ads auth [OPTIONS] [COMMAND]
+
+Commands:
+  status  Show aggregated auth status across implemented providers
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
 ```
 
 ## Meta Topic
@@ -438,7 +471,7 @@ Commands:
   creatives    Search video and image creative assets
   pixels       List tracking pixels
   audiences    List custom audiences
-  auth         Manage stored auth token
+  auth         Manage stored auth credentials
   doctor       Verify auth, config, and API connectivity
   config       Inspect and validate configuration
   help         Print this message or the help of the given subcommand(s)
@@ -619,14 +652,14 @@ agent-ads tiktok auth --help
 ```
 
 ```text
-Manage stored auth token
+Manage stored auth credentials
 
 Usage: agent-ads tiktok auth [OPTIONS] <COMMAND>
 
 Commands:
-  set      Store the TikTok access token in the OS credential store
+  set      Store TikTok auth credentials in the OS credential store
   status   Show auth source and secure storage status
-  delete   Delete the stored TikTok tokens
+  delete   Delete the stored TikTok credentials
   refresh  Refresh the access token using a stored refresh token
   help     Print this message or the help of the given subcommand(s)
 

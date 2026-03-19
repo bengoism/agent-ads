@@ -29,6 +29,12 @@ const sections: Section[] = [
     language: "json"
   },
   {
+    title: "Root Auth",
+    intro: "Inspect aggregated auth status or launch guided local setup.",
+    args: ["auth", "--help"],
+    language: "text"
+  },
+  {
     title: "Meta Topic",
     intro: "The Meta provider owns all currently implemented ad commands.",
     args: ["meta", "--help"],
