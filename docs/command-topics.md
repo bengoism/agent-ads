@@ -23,7 +23,7 @@ Usage: agent-ads [OPTIONS] <COMMAND>
 
 Commands:
   providers  Inspect available and planned ad providers
-  auth       Inspect auth status and route into provider setup
+  auth       Inspect auth status and route into provider setup or deletion
   meta       Meta (Facebook/Instagram) Marketing API commands
   google     Google Ads commands
   tiktok     TikTok Business API commands
@@ -60,19 +60,20 @@ agent-ads providers list
 
 ## Root Auth
 
-Inspect aggregated auth status or launch guided local setup.
+Inspect aggregated auth status or launch guided local setup or credential clearing.
 
 ```bash
 agent-ads auth --help
 ```
 
 ```text
-Inspect auth status and route into provider setup
+Inspect auth status and route into provider setup or deletion
 
 Usage: agent-ads auth [OPTIONS] [COMMAND]
 
 Commands:
   status  Show aggregated auth status across implemented providers
+  clear   Clear stored provider credentials via interactive picker
   help    Print this message or the help of the given subcommand(s)
 
 Options:

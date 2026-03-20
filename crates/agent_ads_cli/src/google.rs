@@ -8,11 +8,8 @@ use agent_ads_core::google_config::{
 use agent_ads_core::output::{OutputEnvelope, OutputMeta};
 use agent_ads_core::secret_store::SecretStore;
 use agent_ads_core::{
-    GoogleClient, GoogleError, GoogleResponse, GOOGLE_ADS_CLIENT_ID_ACCOUNT,
-    GOOGLE_ADS_CLIENT_ID_SERVICE, GOOGLE_ADS_CLIENT_SECRET_ACCOUNT,
-    GOOGLE_ADS_CLIENT_SECRET_SERVICE, GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT,
-    GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE, GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT,
-    GOOGLE_ADS_REFRESH_TOKEN_SERVICE,
+    load_auth_bundle, store_auth_bundle, GoogleAuthBundle, GoogleClient, GoogleError,
+    GoogleResponse, AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
 use clap::{Args, Subcommand};
 use rpassword::prompt_password;
@@ -304,34 +301,18 @@ pub fn handle_auth(
     match command {
         AuthCommand::Set(args) => {
             let inputs = resolve_google_auth_inputs(&args)?;
-            secret_store
-                .set_secret(
-                    GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE,
-                    GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT,
-                    &inputs.developer_token,
-                )
-                .map_err(|error| google_auth_storage_error("store developer token", &error))?;
-            secret_store
-                .set_secret(
-                    GOOGLE_ADS_CLIENT_ID_SERVICE,
-                    GOOGLE_ADS_CLIENT_ID_ACCOUNT,
-                    &inputs.client_id,
-                )
-                .map_err(|error| google_auth_storage_error("store client ID", &error))?;
-            secret_store
-                .set_secret(
-                    GOOGLE_ADS_CLIENT_SECRET_SERVICE,
-                    GOOGLE_ADS_CLIENT_SECRET_ACCOUNT,
-                    &inputs.client_secret,
-                )
-                .map_err(|error| google_auth_storage_error("store client secret", &error))?;
-            secret_store
-                .set_secret(
-                    GOOGLE_ADS_REFRESH_TOKEN_SERVICE,
-                    GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT,
-                    &inputs.refresh_token,
-                )
-                .map_err(|error| google_auth_storage_error("store refresh token", &error))?;
+            let mut bundle = load_auth_bundle(secret_store).map_err(|error| {
+                google_auth_storage_error("store Google Ads credentials", &error)
+            })?;
+            bundle.google = Some(GoogleAuthBundle {
+                developer_token: Some(inputs.developer_token),
+                client_id: Some(inputs.client_id),
+                client_secret: Some(inputs.client_secret),
+                refresh_token: Some(inputs.refresh_token),
+            });
+            store_auth_bundle(secret_store, &bundle).map_err(|error| {
+                google_auth_storage_error("store Google Ads credentials", &error)
+            })?;
 
             Ok(google_command_result(
                 json!({
@@ -354,27 +335,29 @@ pub fn handle_auth(
             0,
         )),
         AuthCommand::Delete => {
-            let deleted_developer_token = secret_store
-                .delete_secret(
-                    GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE,
-                    GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT,
-                )
-                .map_err(|error| google_auth_storage_error("delete developer token", &error))?;
-            let deleted_client_id = secret_store
-                .delete_secret(GOOGLE_ADS_CLIENT_ID_SERVICE, GOOGLE_ADS_CLIENT_ID_ACCOUNT)
-                .map_err(|error| google_auth_storage_error("delete client ID", &error))?;
-            let deleted_client_secret = secret_store
-                .delete_secret(
-                    GOOGLE_ADS_CLIENT_SECRET_SERVICE,
-                    GOOGLE_ADS_CLIENT_SECRET_ACCOUNT,
-                )
-                .map_err(|error| google_auth_storage_error("delete client secret", &error))?;
-            let deleted_refresh_token = secret_store
-                .delete_secret(
-                    GOOGLE_ADS_REFRESH_TOKEN_SERVICE,
-                    GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT,
-                )
-                .map_err(|error| google_auth_storage_error("delete refresh token", &error))?;
+            let mut bundle = load_auth_bundle(secret_store).map_err(|error| {
+                google_auth_storage_error("delete Google Ads credentials", &error)
+            })?;
+            let deleted_google = bundle.google.take();
+            let deleted_developer_token = deleted_google
+                .as_ref()
+                .and_then(|google| google.developer_token.as_ref())
+                .is_some();
+            let deleted_client_id = deleted_google
+                .as_ref()
+                .and_then(|google| google.client_id.as_ref())
+                .is_some();
+            let deleted_client_secret = deleted_google
+                .as_ref()
+                .and_then(|google| google.client_secret.as_ref())
+                .is_some();
+            let deleted_refresh_token = deleted_google
+                .as_ref()
+                .and_then(|google| google.refresh_token.as_ref())
+                .is_some();
+            store_auth_bundle(secret_store, &bundle).map_err(|error| {
+                google_auth_storage_error("delete Google Ads credentials", &error)
+            })?;
 
             Ok(google_command_result(
                 json!({
@@ -1028,32 +1011,32 @@ fn google_auth_status_payload(auth: GoogleAuthSnapshot) -> Value {
         "credentials": {
             "developer_token": {
                 "env_var": GOOGLE_ADS_DEVELOPER_TOKEN_ENV_VAR,
-                "credential_store_service": GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE,
-                "credential_store_account": GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.developer_token.present,
                 "source": auth.developer_token.source,
                 "keychain_present": auth.developer_token.keychain_present,
             },
             "client_id": {
                 "env_var": GOOGLE_ADS_CLIENT_ID_ENV_VAR,
-                "credential_store_service": GOOGLE_ADS_CLIENT_ID_SERVICE,
-                "credential_store_account": GOOGLE_ADS_CLIENT_ID_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.client_id.present,
                 "source": auth.client_id.source,
                 "keychain_present": auth.client_id.keychain_present,
             },
             "client_secret": {
                 "env_var": GOOGLE_ADS_CLIENT_SECRET_ENV_VAR,
-                "credential_store_service": GOOGLE_ADS_CLIENT_SECRET_SERVICE,
-                "credential_store_account": GOOGLE_ADS_CLIENT_SECRET_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.client_secret.present,
                 "source": auth.client_secret.source,
                 "keychain_present": auth.client_secret.keychain_present,
             },
             "refresh_token": {
                 "env_var": GOOGLE_ADS_REFRESH_TOKEN_ENV_VAR,
-                "credential_store_service": GOOGLE_ADS_REFRESH_TOKEN_SERVICE,
-                "credential_store_account": GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.refresh_token.present,
                 "source": auth.refresh_token.source,
                 "keychain_present": auth.refresh_token.keychain_present,

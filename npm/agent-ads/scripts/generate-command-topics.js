@@ -24,7 +24,7 @@ const sections = [
     },
     {
         title: "Root Auth",
-        intro: "Inspect aggregated auth status or launch guided local setup.",
+        intro: "Inspect aggregated auth status or launch guided local setup or credential clearing.",
         args: ["auth", "--help"],
         language: "text"
     },

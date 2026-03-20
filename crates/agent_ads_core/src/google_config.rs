@@ -3,16 +3,11 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::auth_bundle::load_auth_bundle;
 use crate::config::{load_root_file_config, DEFAULT_CONFIG_FILE};
 use crate::google_error::{GoogleError, GoogleResult};
 use crate::output::OutputFormat;
-use crate::secret_store::{
-    SecretStore, SecretStoreError, SecretStoreErrorKind, GOOGLE_ADS_CLIENT_ID_ACCOUNT,
-    GOOGLE_ADS_CLIENT_ID_SERVICE, GOOGLE_ADS_CLIENT_SECRET_ACCOUNT,
-    GOOGLE_ADS_CLIENT_SECRET_SERVICE, GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT,
-    GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE, GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT,
-    GOOGLE_ADS_REFRESH_TOKEN_SERVICE,
-};
+use crate::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
 
 pub const GOOGLE_DEFAULT_API_BASE_URL: &str = "https://googleads.googleapis.com";
 pub const GOOGLE_DEFAULT_API_VERSION: &str = "v23";
@@ -288,48 +283,54 @@ fn google_inspect_with_auth(
 }
 
 fn resolve_google_auth(secret_store: &dyn SecretStore) -> GoogleAuthResolution {
+    let bundle_result = load_auth_bundle(secret_store);
+    let bundle = bundle_result.as_ref().ok();
+    let store_error = bundle_result.as_ref().err().cloned();
+
     GoogleAuthResolution {
         developer_token: resolve_google_secret(
             GOOGLE_ADS_DEVELOPER_TOKEN_ENV_VAR,
-            GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE,
-            GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT,
-            secret_store,
+            bundle
+                .and_then(|bundle| bundle.google.as_ref())
+                .and_then(|google| google.developer_token.clone()),
+            store_error.clone(),
         ),
         client_id: resolve_google_secret(
             GOOGLE_ADS_CLIENT_ID_ENV_VAR,
-            GOOGLE_ADS_CLIENT_ID_SERVICE,
-            GOOGLE_ADS_CLIENT_ID_ACCOUNT,
-            secret_store,
+            bundle
+                .and_then(|bundle| bundle.google.as_ref())
+                .and_then(|google| google.client_id.clone()),
+            store_error.clone(),
         ),
         client_secret: resolve_google_secret(
             GOOGLE_ADS_CLIENT_SECRET_ENV_VAR,
-            GOOGLE_ADS_CLIENT_SECRET_SERVICE,
-            GOOGLE_ADS_CLIENT_SECRET_ACCOUNT,
-            secret_store,
+            bundle
+                .and_then(|bundle| bundle.google.as_ref())
+                .and_then(|google| google.client_secret.clone()),
+            store_error.clone(),
         ),
         refresh_token: resolve_google_secret(
             GOOGLE_ADS_REFRESH_TOKEN_ENV_VAR,
-            GOOGLE_ADS_REFRESH_TOKEN_SERVICE,
-            GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT,
-            secret_store,
+            bundle
+                .and_then(|bundle| bundle.google.as_ref())
+                .and_then(|google| google.refresh_token.clone()),
+            store_error,
         ),
     }
 }
 
 fn resolve_google_secret(
     env_var: &str,
-    service: &str,
-    account: &str,
-    secret_store: &dyn SecretStore,
+    keychain_value: Option<String>,
+    store_error: Option<SecretStoreError>,
 ) -> GoogleSecretResolution {
     let shell_value = env::var(env_var)
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
-    let keychain_result = secret_store.get_secret(service, account);
 
-    match (shell_value, keychain_result) {
-        (Some(shell_value), Ok(keychain_value)) => GoogleSecretResolution {
+    match (shell_value, keychain_value, store_error) {
+        (Some(shell_value), keychain_value, None) => GoogleSecretResolution {
             value: Some(shell_value),
             status: GoogleSecretStatus {
                 present: true,
@@ -338,7 +339,7 @@ fn resolve_google_secret(
             },
             store_error: None,
         },
-        (Some(shell_value), Err(error)) => GoogleSecretResolution {
+        (Some(shell_value), _, Some(error)) => GoogleSecretResolution {
             value: Some(shell_value),
             status: GoogleSecretStatus {
                 present: true,
@@ -347,7 +348,7 @@ fn resolve_google_secret(
             },
             store_error: Some(error),
         },
-        (None, Ok(Some(keychain_value))) => GoogleSecretResolution {
+        (None, Some(keychain_value), None) => GoogleSecretResolution {
             value: Some(keychain_value),
             status: GoogleSecretStatus {
                 present: true,
@@ -356,7 +357,7 @@ fn resolve_google_secret(
             },
             store_error: None,
         },
-        (None, Ok(None)) => GoogleSecretResolution {
+        (None, None, None) => GoogleSecretResolution {
             value: None,
             status: GoogleSecretStatus {
                 present: false,
@@ -365,7 +366,7 @@ fn resolve_google_secret(
             },
             store_error: None,
         },
-        (None, Err(error)) => GoogleSecretResolution {
+        (None, None, Some(error)) => GoogleSecretResolution {
             value: None,
             status: GoogleSecretStatus {
                 present: false,
@@ -373,6 +374,15 @@ fn resolve_google_secret(
                 keychain_present: false,
             },
             store_error: Some(error),
+        },
+        (None, Some(keychain_value), Some(_)) => GoogleSecretResolution {
+            value: Some(keychain_value),
+            status: GoogleSecretStatus {
+                present: true,
+                source: GoogleSecretSource::Keychain,
+                keychain_present: true,
+            },
+            store_error: None,
         },
     }
 }
@@ -433,13 +443,8 @@ mod tests {
         GoogleResolvedConfig, GoogleSecretSource,
     };
     use crate::output::OutputFormat;
-    use crate::secret_store::{
-        SecretStore, SecretStoreError, SecretStoreErrorKind, GOOGLE_ADS_CLIENT_ID_ACCOUNT,
-        GOOGLE_ADS_CLIENT_ID_SERVICE, GOOGLE_ADS_CLIENT_SECRET_ACCOUNT,
-        GOOGLE_ADS_CLIENT_SECRET_SERVICE, GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT,
-        GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE, GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT,
-        GOOGLE_ADS_REFRESH_TOKEN_SERVICE,
-    };
+    use crate::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
+    use crate::{store_auth_bundle, AuthBundle, GoogleAuthBundle};
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
@@ -457,35 +462,19 @@ mod tests {
         }
 
         fn put_google_secrets(&self) {
-            let mut secrets = self.secrets.lock().unwrap();
-            secrets.insert(
-                (
-                    GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE.to_string(),
-                    GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT.to_string(),
-                ),
-                "dev-token".to_string(),
-            );
-            secrets.insert(
-                (
-                    GOOGLE_ADS_CLIENT_ID_SERVICE.to_string(),
-                    GOOGLE_ADS_CLIENT_ID_ACCOUNT.to_string(),
-                ),
-                "client-id".to_string(),
-            );
-            secrets.insert(
-                (
-                    GOOGLE_ADS_CLIENT_SECRET_SERVICE.to_string(),
-                    GOOGLE_ADS_CLIENT_SECRET_ACCOUNT.to_string(),
-                ),
-                "client-secret".to_string(),
-            );
-            secrets.insert(
-                (
-                    GOOGLE_ADS_REFRESH_TOKEN_SERVICE.to_string(),
-                    GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT.to_string(),
-                ),
-                "refresh-token".to_string(),
-            );
+            store_auth_bundle(
+                self,
+                &AuthBundle {
+                    google: Some(GoogleAuthBundle {
+                        developer_token: Some("dev-token".to_string()),
+                        client_id: Some("client-id".to_string()),
+                        client_secret: Some("client-secret".to_string()),
+                        refresh_token: Some("refresh-token".to_string()),
+                    }),
+                    ..AuthBundle::default()
+                },
+            )
+            .unwrap();
         }
 
         fn set_get_error(&self, error: SecretStoreError) {

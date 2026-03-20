@@ -1,5 +1,8 @@
 use keyring::{Entry, Error as KeyringError};
 
+pub const AUTH_BUNDLE_SERVICE: &str = "agent-ads";
+pub const AUTH_BUNDLE_ACCOUNT: &str = "auth-bundle-v1";
+
 pub const META_ACCESS_TOKEN_SERVICE: &str = "agent-ads";
 pub const META_ACCESS_TOKEN_ACCOUNT: &str = "meta-access-token";
 
