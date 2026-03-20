@@ -10,7 +10,8 @@ use agent_ads_core::endpoints::{accounts, changes, creative, objects, reports, t
 use agent_ads_core::error::MetaAdsError;
 use agent_ads_core::output::{OutputEnvelope, OutputMeta};
 use agent_ads_core::{
-    GraphClient, SecretStore, META_ACCESS_TOKEN_ACCOUNT, META_ACCESS_TOKEN_SERVICE,
+    load_auth_bundle, store_auth_bundle, GraphClient, MetaAuthBundle, SecretStore,
+    AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
 use clap::{Args, Subcommand, ValueEnum};
 use rpassword::prompt_password;
@@ -495,16 +496,20 @@ pub fn handle_auth(
     match command {
         AuthCommand::Set(args) => {
             let token = resolve_auth_token_input(&args)?;
-            secret_store
-                .set_secret(META_ACCESS_TOKEN_SERVICE, META_ACCESS_TOKEN_ACCOUNT, &token)
+            let mut bundle = load_auth_bundle(secret_store)
+                .map_err(|error| auth_storage_error("store", &error))?;
+            bundle.meta = Some(MetaAuthBundle {
+                access_token: Some(token),
+            });
+            store_auth_bundle(secret_store, &bundle)
                 .map_err(|error| auth_storage_error("store", &error))?;
 
             Ok(meta_command_result(
                 json!({
                     "provider": "meta",
                     "stored": true,
-                    "credential_store_service": META_ACCESS_TOKEN_SERVICE,
-                    "credential_store_account": META_ACCESS_TOKEN_ACCOUNT,
+                    "credential_store_service": AUTH_BUNDLE_SERVICE,
+                    "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 }),
                 "/meta/auth/set",
                 0,
@@ -516,16 +521,22 @@ pub fn handle_auth(
             0,
         )),
         AuthCommand::Delete => {
-            let deleted = secret_store
-                .delete_secret(META_ACCESS_TOKEN_SERVICE, META_ACCESS_TOKEN_ACCOUNT)
+            let mut bundle = load_auth_bundle(secret_store)
+                .map_err(|error| auth_storage_error("delete", &error))?;
+            let deleted = bundle
+                .meta
+                .take()
+                .and_then(|meta| meta.access_token)
+                .is_some();
+            store_auth_bundle(secret_store, &bundle)
                 .map_err(|error| auth_storage_error("delete", &error))?;
 
             Ok(meta_command_result(
                 json!({
                     "provider": "meta",
                     "deleted": deleted,
-                    "credential_store_service": META_ACCESS_TOKEN_SERVICE,
-                    "credential_store_account": META_ACCESS_TOKEN_ACCOUNT,
+                    "credential_store_service": AUTH_BUNDLE_SERVICE,
+                    "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 }),
                 "/meta/auth/delete",
                 0,
@@ -1468,8 +1479,8 @@ fn access_token_detail(snapshot: &ConfigSnapshot) -> String {
 fn auth_status_payload(status: AccessTokenStatus) -> Value {
     json!({
         "provider": "meta",
-        "credential_store_service": META_ACCESS_TOKEN_SERVICE,
-        "credential_store_account": META_ACCESS_TOKEN_ACCOUNT,
+        "credential_store_service": AUTH_BUNDLE_SERVICE,
+        "credential_store_account": AUTH_BUNDLE_ACCOUNT,
         "access_token_present": status.access_token_present,
         "access_token_source": status.access_token_source,
         "credential_store_available": status.credential_store_available,

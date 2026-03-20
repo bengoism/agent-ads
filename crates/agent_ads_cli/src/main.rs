@@ -4,35 +4,28 @@ mod pinterest;
 mod tiktok;
 
 use std::collections::BTreeMap;
+use std::env;
 use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use agent_ads_core::config::{
-    inspect, inspect_access_token, AccessTokenSource, AccessTokenStatus, ConfigOverrides,
-    ResolvedConfig,
-};
+use agent_ads_core::config::{inspect, ConfigOverrides, ResolvedConfig};
 use agent_ads_core::error::{GraphApiError, MetaAdsError};
-use agent_ads_core::google_config::{
-    google_inspect_auth, GoogleAuthSnapshot, GoogleConfigOverrides, GoogleSecretStatus,
-};
+use agent_ads_core::google_config::GoogleConfigOverrides;
 use agent_ads_core::google_error::{GoogleApiError, GoogleError};
 use agent_ads_core::output::{
     render_output, OutputEnvelope, OutputFormat, OutputMeta, RenderOptions,
 };
-use agent_ads_core::pinterest_config::{
-    pinterest_inspect_auth, PinterestAuthSnapshot, PinterestConfigOverrides, PinterestSecretStatus,
-};
+use agent_ads_core::pinterest_config::PinterestConfigOverrides;
 use agent_ads_core::pinterest_error::{PinterestApiError, PinterestError};
-use agent_ads_core::tiktok_config::{
-    tiktok_inspect_auth, TikTokAuthSnapshot, TikTokConfigOverrides, TikTokSecretStatus,
-};
+use agent_ads_core::tiktok_config::TikTokConfigOverrides;
 use agent_ads_core::tiktok_error::{TikTokApiError, TikTokError};
 use agent_ads_core::{
-    google_inspect, pinterest_inspect, tiktok_inspect, GoogleClient, GoogleResolvedConfig,
-    GraphClient, OsKeyringStore, PinterestClient, PinterestResolvedConfig, TikTokClient,
-    TikTokResolvedConfig,
+    google_inspect, load_auth_bundle, pinterest_inspect, tiktok_inspect, AuthBundle, GoogleClient,
+    GoogleResolvedConfig, GraphClient, OsKeyringStore, PinterestClient, PinterestResolvedConfig,
+    SecretStoreError, SecretStoreErrorKind, TikTokClient, TikTokResolvedConfig,
+    AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use dialoguer::{theme::ColorfulTheme, Select};
@@ -134,7 +127,7 @@ enum Command {
         #[command(subcommand)]
         command: ProvidersCommand,
     },
-    #[command(about = "Inspect auth status and route into provider setup")]
+    #[command(about = "Inspect auth status and route into provider setup or deletion")]
     Auth {
         #[command(subcommand)]
         command: Option<RootAuthCommand>,
@@ -171,6 +164,8 @@ enum ProvidersCommand {
 enum RootAuthCommand {
     #[command(about = "Show aggregated auth status across implemented providers")]
     Status,
+    #[command(about = "Clear stored provider credentials via interactive picker")]
+    Clear,
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +193,12 @@ enum RootAuthProvider {
     Google,
     Tiktok,
     Pinterest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RootAuthFlow {
+    Setup,
+    Clear,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -238,6 +239,22 @@ impl RootAuthProvider {
             Self::Google => "google",
             Self::Tiktok => "tiktok",
             Self::Pinterest => "pinterest",
+        }
+    }
+}
+
+impl RootAuthFlow {
+    fn provider_prompt(self) -> &'static str {
+        match self {
+            Self::Setup => "Select provider to configure",
+            Self::Clear => "Select provider to clear",
+        }
+    }
+
+    fn provider_verb(self) -> &'static str {
+        match self {
+            Self::Setup => "configure",
+            Self::Clear => "clear",
         }
     }
 }
@@ -735,8 +752,16 @@ fn handle_root_auth_command(
             output_options,
             output_path,
         ),
+        Some(RootAuthCommand::Clear) => {
+            match validate_root_auth_clear_mode(explicit_output_shape, output_path) {
+                Ok(()) => {
+                    run_interactive_root_auth(RootAuthFlow::Clear, secret_store, output_options)
+                }
+                Err(error) => exit_with_error(&error, output_options),
+            }
+        }
         None if should_run_interactive_root_auth(explicit_output_shape, output_path) => {
-            run_interactive_root_auth(secret_store, output_options)
+            run_interactive_root_auth(RootAuthFlow::Setup, secret_store, output_options)
         }
         None => emit_result(
             root_auth_status_result(secret_store),
@@ -757,13 +782,27 @@ fn should_run_interactive_root_auth(
         && io::stderr().is_terminal()
 }
 
+fn validate_root_auth_clear_mode(
+    explicit_output_shape: bool,
+    output_path: Option<&Path>,
+) -> Result<(), MetaAdsError> {
+    if should_run_interactive_root_auth(explicit_output_shape, output_path) {
+        Ok(())
+    } else {
+        Err(MetaAdsError::Config(
+            "`agent-ads auth clear` requires an interactive terminal without output redirection. Run `agent-ads <provider> auth delete` instead.".to_string(),
+        ))
+    }
+}
+
 fn run_interactive_root_auth(
+    flow: RootAuthFlow,
     secret_store: &dyn agent_ads_core::SecretStore,
     output_options: &OutputOptions,
 ) -> ExitCode {
-    let summaries = build_runtime_root_auth_status(secret_store);
-    match select_root_auth_provider(&summaries) {
-        Ok(Some(provider)) => run_root_auth_setup(provider, secret_store, output_options),
+    let summaries = build_runtime_root_auth_status();
+    match select_root_auth_provider(flow, &summaries) {
+        Ok(Some(provider)) => run_root_auth_flow(flow, provider, secret_store, output_options),
         Ok(None) => ExitCode::SUCCESS,
         Err(error) => {
             let mut stderr = io::stderr();
@@ -782,8 +821,10 @@ fn run_interactive_root_auth(
                 );
             }
 
-            match run_root_auth_numeric_prompt(&summaries) {
-                Ok(Some(provider)) => run_root_auth_setup(provider, secret_store, output_options),
+            match run_root_auth_numeric_prompt(flow, &summaries) {
+                Ok(Some(provider)) => {
+                    run_root_auth_flow(flow, provider, secret_store, output_options)
+                }
                 Ok(None) => ExitCode::SUCCESS,
                 Err(error) => exit_with_error(&MetaAdsError::Io(error), output_options),
             }
@@ -792,11 +833,12 @@ fn run_interactive_root_auth(
 }
 
 fn select_root_auth_provider(
+    flow: RootAuthFlow,
     summaries: &[RootProviderAuthStatus],
 ) -> Result<Option<RootAuthProvider>, dialoguer::Error> {
     let items = root_auth_menu_items(summaries);
     let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Select provider to configure")
+        .with_prompt(flow.provider_prompt())
         .items(&items)
         .default(0)
         .report(false)
@@ -806,6 +848,7 @@ fn select_root_auth_provider(
 }
 
 fn run_root_auth_numeric_prompt(
+    flow: RootAuthFlow,
     summaries: &[RootProviderAuthStatus],
 ) -> io::Result<Option<RootAuthProvider>> {
     let mut stderr = io::stderr();
@@ -814,7 +857,8 @@ fn run_root_auth_numeric_prompt(
     loop {
         write!(
             &mut stderr,
-            "Select provider to configure [1-{}, q to cancel]: ",
+            "Select provider to {} [1-{}, q to cancel]: ",
+            flow.provider_verb(),
             summaries.len()
         )?;
         stderr.flush()?;
@@ -889,6 +933,43 @@ fn parse_root_auth_selection(
     }
 }
 
+fn parse_root_auth_confirmation(input: &str) -> Result<Option<bool>, &'static str> {
+    let trimmed = input.trim();
+    if trimmed == "1"
+        || trimmed.eq_ignore_ascii_case("y")
+        || trimmed.eq_ignore_ascii_case("yes")
+        || trimmed.eq_ignore_ascii_case("clear")
+    {
+        return Ok(Some(true));
+    }
+
+    if trimmed.is_empty()
+        || trimmed == "2"
+        || trimmed.eq_ignore_ascii_case("n")
+        || trimmed.eq_ignore_ascii_case("no")
+        || trimmed.eq_ignore_ascii_case("cancel")
+        || trimmed.eq_ignore_ascii_case("q")
+        || trimmed.eq_ignore_ascii_case("quit")
+        || trimmed.eq_ignore_ascii_case("exit")
+    {
+        return Ok(None);
+    }
+
+    Err("Invalid selection. Enter 1 to clear or 2 to cancel.")
+}
+
+fn run_root_auth_flow(
+    flow: RootAuthFlow,
+    provider: RootAuthProvider,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    output_options: &OutputOptions,
+) -> ExitCode {
+    match flow {
+        RootAuthFlow::Setup => run_root_auth_setup(provider, secret_store, output_options),
+        RootAuthFlow::Clear => run_root_auth_clear(provider, secret_store, output_options),
+    }
+}
+
 fn run_root_auth_setup(
     provider: RootAuthProvider,
     secret_store: &dyn agent_ads_core::SecretStore,
@@ -942,10 +1023,144 @@ fn run_root_auth_setup(
     }
 }
 
-fn root_auth_status_result(secret_store: &dyn agent_ads_core::SecretStore) -> CommandResult {
+fn run_root_auth_clear(
+    provider: RootAuthProvider,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    output_options: &OutputOptions,
+) -> ExitCode {
+    let mut stderr = io::stderr();
+    if writeln!(
+        &mut stderr,
+        "Clears stored {} credentials from the OS credential store only. Shell environment variables will not be changed.",
+        provider.provider_name()
+    )
+    .is_err()
+    {
+        return exit_with_error(
+            &MetaAdsError::Config(
+                "interactive confirmation failed and the scope notice could not be written"
+                    .to_string(),
+            ),
+            output_options,
+        );
+    }
+
+    match select_root_auth_clear_confirmation(provider) {
+        Ok(Some(true)) => run_root_auth_delete_provider(provider, secret_store, output_options),
+        Ok(Some(false) | None) => ExitCode::SUCCESS,
+        Err(error) => {
+            if writeln!(
+                &mut stderr,
+                "warning: interactive confirmation unavailable, falling back to typed confirmation: {error}"
+            )
+            .is_err()
+            {
+                return exit_with_error(
+                    &MetaAdsError::Config(
+                        "interactive confirmation failed and the fallback warning could not be written"
+                            .to_string(),
+                    ),
+                    output_options,
+                );
+            }
+
+            match run_root_auth_clear_confirmation_prompt(provider) {
+                Ok(Some(true)) => {
+                    run_root_auth_delete_provider(provider, secret_store, output_options)
+                }
+                Ok(Some(false) | None) => ExitCode::SUCCESS,
+                Err(error) => exit_with_error(&MetaAdsError::Io(error), output_options),
+            }
+        }
+    }
+}
+
+fn select_root_auth_clear_confirmation(
+    provider: RootAuthProvider,
+) -> Result<Option<bool>, dialoguer::Error> {
+    let items = root_auth_clear_menu_items(provider);
+    Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("Choose action")
+        .items(&items)
+        .default(1)
+        .report(false)
+        .interact_opt()
+        .map(|selection| match selection {
+            Some(0) => Some(true),
+            Some(_) | None => None,
+        })
+}
+
+fn run_root_auth_clear_confirmation_prompt(provider: RootAuthProvider) -> io::Result<Option<bool>> {
+    let mut stderr = io::stderr();
+
+    loop {
+        writeln!(
+            &mut stderr,
+            "[1] Clear stored {} credentials",
+            provider.provider_name()
+        )?;
+        writeln!(&mut stderr, "[2] Cancel")?;
+        write!(&mut stderr, "Select action [1-2, q to cancel]: ")?;
+        stderr.flush()?;
+
+        let mut input = String::new();
+        match io::stdin().read_line(&mut input)? {
+            0 => return Ok(None),
+            _ => {}
+        }
+
+        match parse_root_auth_confirmation(&input) {
+            Ok(result) => return Ok(result),
+            Err(message) => writeln!(&mut stderr, "{message}")?,
+        }
+    }
+}
+
+fn root_auth_clear_menu_items(provider: RootAuthProvider) -> Vec<String> {
+    vec![
+        format!("Clear stored {} credentials", provider.provider_name()),
+        "Cancel".to_string(),
+    ]
+}
+
+fn run_root_auth_delete_provider(
+    provider: RootAuthProvider,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    output_options: &OutputOptions,
+) -> ExitCode {
+    match provider {
+        RootAuthProvider::Meta => {
+            match meta::handle_auth(meta::AuthCommand::Delete, secret_store) {
+                Ok(result) => emit_result(result, output_options, None),
+                Err(error) => exit_with_error(&error, output_options),
+            }
+        }
+        RootAuthProvider::Google => {
+            match google::handle_auth(google::AuthCommand::Delete, secret_store) {
+                Ok(result) => emit_result(result, output_options, None),
+                Err(error) => exit_with_google_error(&error, output_options),
+            }
+        }
+        RootAuthProvider::Tiktok => {
+            match tiktok::handle_auth(tiktok::AuthCommand::Delete, secret_store) {
+                Ok(result) => emit_result(result, output_options, None),
+                Err(error) => exit_with_tiktok_error(&error, output_options),
+            }
+        }
+        RootAuthProvider::Pinterest => {
+            match pinterest::handle_auth(pinterest::AuthCommand::Delete, secret_store) {
+                Ok(result) => emit_result(result, output_options, None),
+                Err(error) => exit_with_pinterest_error(&error, output_options),
+            }
+        }
+    }
+}
+
+fn root_auth_status_result(_secret_store: &dyn agent_ads_core::SecretStore) -> CommandResult {
     static_command_result(
         json!({
-            "providers": build_runtime_root_auth_status(secret_store)
+            "providers": build_runtime_root_auth_status()
         }),
         "/auth/status",
         0,
@@ -956,218 +1171,209 @@ fn root_auth_status_result(secret_store: &dyn agent_ads_core::SecretStore) -> Co
 fn build_root_auth_status(
     secret_store: &dyn agent_ads_core::SecretStore,
 ) -> Vec<RootProviderAuthStatus> {
-    vec![
-        build_meta_root_auth_status(inspect_access_token(secret_store)),
-        build_google_root_auth_status(google_inspect_auth(secret_store)),
-        build_tiktok_root_auth_status(tiktok_inspect_auth(secret_store)),
-        build_pinterest_root_auth_status(pinterest_inspect_auth(secret_store)),
-    ]
+    build_root_auth_status_from_bundle_result(load_auth_bundle(secret_store))
 }
 
-fn build_runtime_root_auth_status(
-    secret_store: &dyn agent_ads_core::SecretStore,
+fn build_runtime_root_auth_status() -> Vec<RootProviderAuthStatus> {
+    build_root_auth_status_from_bundle_result(load_auth_bundle_with_timeout())
+}
+
+fn build_root_auth_status_from_bundle_result(
+    bundle_result: Result<AuthBundle, SecretStoreError>,
 ) -> Vec<RootProviderAuthStatus> {
+    let bundle = bundle_result.as_ref().ok();
+    let store_error = bundle_result.as_ref().err().cloned();
+
     vec![
-        build_meta_root_auth_status(inspect_meta_access_token_with_timeout()),
-        build_google_root_auth_status(google_inspect_auth(secret_store)),
-        build_tiktok_root_auth_status(tiktok_inspect_auth(secret_store)),
-        build_pinterest_root_auth_status(pinterest_inspect_auth(secret_store)),
+        build_meta_root_auth_status(bundle, store_error.as_ref()),
+        build_google_root_auth_status(bundle, store_error.as_ref()),
+        build_tiktok_root_auth_status(bundle, store_error.as_ref()),
+        build_pinterest_root_auth_status(bundle, store_error.as_ref()),
     ]
 }
 
-fn inspect_meta_access_token_with_timeout() -> AccessTokenStatus {
+fn load_auth_bundle_with_timeout() -> Result<AuthBundle, SecretStoreError> {
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let status = inspect_access_token(&OsKeyringStore);
-        let _ = sender.send(status);
+        let bundle = load_auth_bundle(&OsKeyringStore);
+        let _ = sender.send(bundle);
     });
 
     match receiver.recv_timeout(std::time::Duration::from_secs(2)) {
-        Ok(status) => status,
-        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => AccessTokenStatus {
-            access_token_present: false,
-            access_token_source: AccessTokenSource::Missing,
-            credential_store_available: false,
-            keychain_token_present: false,
-            credential_store_error: Some(
-                "timed out while reading the Meta credential store entry".to_string(),
-            ),
-        },
-        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => AccessTokenStatus {
-            access_token_present: false,
-            access_token_source: AccessTokenSource::Missing,
-            credential_store_available: false,
-            keychain_token_present: false,
-            credential_store_error: Some(
-                "failed to read the Meta credential store entry".to_string(),
-            ),
-        },
+        Ok(bundle_result) => bundle_result,
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(SecretStoreError::new(
+            SecretStoreErrorKind::Unavailable,
+            "timed out while reading the auth bundle from the credential store".to_string(),
+        )),
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(SecretStoreError::new(
+            SecretStoreErrorKind::Failure,
+            "failed to read the auth bundle from the credential store".to_string(),
+        )),
     }
 }
 
-fn build_meta_root_auth_status(status: AccessTokenStatus) -> RootProviderAuthStatus {
+fn build_meta_root_auth_status(
+    bundle: Option<&AuthBundle>,
+    store_error: Option<&SecretStoreError>,
+) -> RootProviderAuthStatus {
+    let access_token = root_bundle_credential(
+        "META_ADS_ACCESS_TOKEN",
+        bundle
+            .and_then(|bundle| bundle.meta.as_ref())
+            .and_then(|meta| meta.access_token.as_ref())
+            .is_some(),
+    );
+
     provider_auth_summary(
         RootAuthProvider::Meta,
-        status.access_token_present,
-        status.credential_store_available,
-        status.credential_store_error,
-        [(
-            "access_token".to_string(),
-            credential_status(
-                "META_ADS_ACCESS_TOKEN",
-                agent_ads_core::META_ACCESS_TOKEN_SERVICE,
-                agent_ads_core::META_ACCESS_TOKEN_ACCOUNT,
-                status.access_token_present,
-                &status.access_token_source,
-                status.keychain_token_present,
-            ),
-        )],
+        access_token.present,
+        credential_store_available(store_error),
+        credential_store_error(store_error),
+        [("access_token".to_string(), access_token)],
     )
 }
 
-fn build_google_root_auth_status(snapshot: GoogleAuthSnapshot) -> RootProviderAuthStatus {
-    let usable = snapshot.developer_token.present
-        && snapshot.client_id.present
-        && snapshot.client_secret.present
-        && snapshot.refresh_token.present;
+fn build_google_root_auth_status(
+    bundle: Option<&AuthBundle>,
+    store_error: Option<&SecretStoreError>,
+) -> RootProviderAuthStatus {
+    let developer_token = root_bundle_credential(
+        "GOOGLE_ADS_DEVELOPER_TOKEN",
+        bundle
+            .and_then(|bundle| bundle.google.as_ref())
+            .and_then(|google| google.developer_token.as_ref())
+            .is_some(),
+    );
+    let client_id = root_bundle_credential(
+        "GOOGLE_ADS_CLIENT_ID",
+        bundle
+            .and_then(|bundle| bundle.google.as_ref())
+            .and_then(|google| google.client_id.as_ref())
+            .is_some(),
+    );
+    let client_secret = root_bundle_credential(
+        "GOOGLE_ADS_CLIENT_SECRET",
+        bundle
+            .and_then(|bundle| bundle.google.as_ref())
+            .and_then(|google| google.client_secret.as_ref())
+            .is_some(),
+    );
+    let refresh_token = root_bundle_credential(
+        "GOOGLE_ADS_REFRESH_TOKEN",
+        bundle
+            .and_then(|bundle| bundle.google.as_ref())
+            .and_then(|google| google.refresh_token.as_ref())
+            .is_some(),
+    );
+    let usable = developer_token.present
+        && client_id.present
+        && client_secret.present
+        && refresh_token.present;
+
     provider_auth_summary(
         RootAuthProvider::Google,
         usable,
-        snapshot.credential_store_available,
-        snapshot.credential_store_error,
+        credential_store_available(store_error),
+        credential_store_error(store_error),
         [
-            (
-                "developer_token".to_string(),
-                credential_status(
-                    "GOOGLE_ADS_DEVELOPER_TOKEN",
-                    agent_ads_core::GOOGLE_ADS_DEVELOPER_TOKEN_SERVICE,
-                    agent_ads_core::GOOGLE_ADS_DEVELOPER_TOKEN_ACCOUNT,
-                    snapshot.developer_token.present,
-                    &snapshot.developer_token.source,
-                    snapshot.developer_token.keychain_present,
-                ),
-            ),
-            (
-                "client_id".to_string(),
-                google_root_credential(
-                    "GOOGLE_ADS_CLIENT_ID",
-                    agent_ads_core::GOOGLE_ADS_CLIENT_ID_SERVICE,
-                    agent_ads_core::GOOGLE_ADS_CLIENT_ID_ACCOUNT,
-                    &snapshot.client_id,
-                ),
-            ),
-            (
-                "client_secret".to_string(),
-                google_root_credential(
-                    "GOOGLE_ADS_CLIENT_SECRET",
-                    agent_ads_core::GOOGLE_ADS_CLIENT_SECRET_SERVICE,
-                    agent_ads_core::GOOGLE_ADS_CLIENT_SECRET_ACCOUNT,
-                    &snapshot.client_secret,
-                ),
-            ),
-            (
-                "refresh_token".to_string(),
-                google_root_credential(
-                    "GOOGLE_ADS_REFRESH_TOKEN",
-                    agent_ads_core::GOOGLE_ADS_REFRESH_TOKEN_SERVICE,
-                    agent_ads_core::GOOGLE_ADS_REFRESH_TOKEN_ACCOUNT,
-                    &snapshot.refresh_token,
-                ),
-            ),
+            ("developer_token".to_string(), developer_token),
+            ("client_id".to_string(), client_id),
+            ("client_secret".to_string(), client_secret),
+            ("refresh_token".to_string(), refresh_token),
         ],
     )
 }
 
-fn build_tiktok_root_auth_status(snapshot: TikTokAuthSnapshot) -> RootProviderAuthStatus {
+fn build_tiktok_root_auth_status(
+    bundle: Option<&AuthBundle>,
+    store_error: Option<&SecretStoreError>,
+) -> RootProviderAuthStatus {
+    let app_id = root_bundle_credential(
+        agent_ads_core::TIKTOK_ADS_APP_ID_ENV_VAR,
+        bundle
+            .and_then(|bundle| bundle.tiktok.as_ref())
+            .and_then(|tiktok| tiktok.app_id.as_ref())
+            .is_some(),
+    );
+    let app_secret = root_bundle_credential(
+        agent_ads_core::TIKTOK_ADS_APP_SECRET_ENV_VAR,
+        bundle
+            .and_then(|bundle| bundle.tiktok.as_ref())
+            .and_then(|tiktok| tiktok.app_secret.as_ref())
+            .is_some(),
+    );
+    let access_token = root_bundle_credential(
+        agent_ads_core::TIKTOK_ADS_ACCESS_TOKEN_ENV_VAR,
+        bundle
+            .and_then(|bundle| bundle.tiktok.as_ref())
+            .and_then(|tiktok| tiktok.access_token.as_ref())
+            .is_some(),
+    );
+    let refresh_token = root_bundle_credential(
+        agent_ads_core::TIKTOK_ADS_REFRESH_TOKEN_ENV_VAR,
+        bundle
+            .and_then(|bundle| bundle.tiktok.as_ref())
+            .and_then(|tiktok| tiktok.refresh_token.as_ref())
+            .is_some(),
+    );
+
     provider_auth_summary(
         RootAuthProvider::Tiktok,
-        snapshot.access_token.present,
-        snapshot.credential_store_available,
-        snapshot.credential_store_error,
+        access_token.present,
+        credential_store_available(store_error),
+        credential_store_error(store_error),
         [
-            (
-                "app_id".to_string(),
-                tiktok_root_credential(
-                    agent_ads_core::TIKTOK_ADS_APP_ID_ENV_VAR,
-                    agent_ads_core::TIKTOK_APP_ID_SERVICE,
-                    agent_ads_core::TIKTOK_APP_ID_ACCOUNT,
-                    &snapshot.app_id,
-                ),
-            ),
-            (
-                "app_secret".to_string(),
-                tiktok_root_credential(
-                    agent_ads_core::TIKTOK_ADS_APP_SECRET_ENV_VAR,
-                    agent_ads_core::TIKTOK_APP_SECRET_SERVICE,
-                    agent_ads_core::TIKTOK_APP_SECRET_ACCOUNT,
-                    &snapshot.app_secret,
-                ),
-            ),
-            (
-                "access_token".to_string(),
-                tiktok_root_credential(
-                    agent_ads_core::TIKTOK_ADS_ACCESS_TOKEN_ENV_VAR,
-                    agent_ads_core::TIKTOK_ACCESS_TOKEN_SERVICE,
-                    agent_ads_core::TIKTOK_ACCESS_TOKEN_ACCOUNT,
-                    &snapshot.access_token,
-                ),
-            ),
-            (
-                "refresh_token".to_string(),
-                tiktok_root_credential(
-                    agent_ads_core::TIKTOK_ADS_REFRESH_TOKEN_ENV_VAR,
-                    agent_ads_core::TIKTOK_REFRESH_TOKEN_SERVICE,
-                    agent_ads_core::TIKTOK_REFRESH_TOKEN_ACCOUNT,
-                    &snapshot.refresh_token,
-                ),
-            ),
+            ("app_id".to_string(), app_id),
+            ("app_secret".to_string(), app_secret),
+            ("access_token".to_string(), access_token),
+            ("refresh_token".to_string(), refresh_token),
         ],
     )
 }
 
-fn build_pinterest_root_auth_status(snapshot: PinterestAuthSnapshot) -> RootProviderAuthStatus {
+fn build_pinterest_root_auth_status(
+    bundle: Option<&AuthBundle>,
+    store_error: Option<&SecretStoreError>,
+) -> RootProviderAuthStatus {
+    let app_id = root_bundle_credential(
+        "PINTEREST_ADS_APP_ID",
+        bundle
+            .and_then(|bundle| bundle.pinterest.as_ref())
+            .and_then(|pinterest| pinterest.app_id.as_ref())
+            .is_some(),
+    );
+    let app_secret = root_bundle_credential(
+        "PINTEREST_ADS_APP_SECRET",
+        bundle
+            .and_then(|bundle| bundle.pinterest.as_ref())
+            .and_then(|pinterest| pinterest.app_secret.as_ref())
+            .is_some(),
+    );
+    let access_token = root_bundle_credential(
+        "PINTEREST_ADS_ACCESS_TOKEN",
+        bundle
+            .and_then(|bundle| bundle.pinterest.as_ref())
+            .and_then(|pinterest| pinterest.access_token.as_ref())
+            .is_some(),
+    );
+    let refresh_token = root_bundle_credential(
+        "PINTEREST_ADS_REFRESH_TOKEN",
+        bundle
+            .and_then(|bundle| bundle.pinterest.as_ref())
+            .and_then(|pinterest| pinterest.refresh_token.as_ref())
+            .is_some(),
+    );
+
     provider_auth_summary(
         RootAuthProvider::Pinterest,
-        snapshot.access_token.present,
-        snapshot.credential_store_available,
-        snapshot.credential_store_error,
+        access_token.present,
+        credential_store_available(store_error),
+        credential_store_error(store_error),
         [
-            (
-                "app_id".to_string(),
-                pinterest_root_credential(
-                    "PINTEREST_ADS_APP_ID",
-                    agent_ads_core::PINTEREST_ADS_APP_ID_SERVICE,
-                    agent_ads_core::PINTEREST_ADS_APP_ID_ACCOUNT,
-                    &snapshot.app_id,
-                ),
-            ),
-            (
-                "app_secret".to_string(),
-                pinterest_root_credential(
-                    "PINTEREST_ADS_APP_SECRET",
-                    agent_ads_core::PINTEREST_ADS_APP_SECRET_SERVICE,
-                    agent_ads_core::PINTEREST_ADS_APP_SECRET_ACCOUNT,
-                    &snapshot.app_secret,
-                ),
-            ),
-            (
-                "access_token".to_string(),
-                pinterest_root_credential(
-                    "PINTEREST_ADS_ACCESS_TOKEN",
-                    agent_ads_core::PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
-                    agent_ads_core::PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
-                    &snapshot.access_token,
-                ),
-            ),
-            (
-                "refresh_token".to_string(),
-                pinterest_root_credential(
-                    "PINTEREST_ADS_REFRESH_TOKEN",
-                    agent_ads_core::PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
-                    agent_ads_core::PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
-                    &snapshot.refresh_token,
-                ),
-            ),
+            ("app_id".to_string(), app_id),
+            ("app_secret".to_string(), app_secret),
+            ("access_token".to_string(), access_token),
+            ("refresh_token".to_string(), refresh_token),
         ],
     )
 }
@@ -1204,75 +1410,51 @@ fn provider_auth_summary(
 
 fn credential_status(
     env_var: &'static str,
-    credential_store_service: &'static str,
-    credential_store_account: &'static str,
     present: bool,
-    source: &impl serde::Serialize,
+    source: &'static str,
     keychain_present: bool,
 ) -> RootCredentialStatus {
     RootCredentialStatus {
         env_var,
-        credential_store_service,
-        credential_store_account,
+        credential_store_service: AUTH_BUNDLE_SERVICE,
+        credential_store_account: AUTH_BUNDLE_ACCOUNT,
         present,
-        source: serialized_source_name(source),
+        source: source.to_string(),
         keychain_present,
     }
 }
 
-fn google_root_credential(
-    env_var: &'static str,
-    credential_store_service: &'static str,
-    credential_store_account: &'static str,
-    status: &GoogleSecretStatus,
-) -> RootCredentialStatus {
-    credential_status(
-        env_var,
-        credential_store_service,
-        credential_store_account,
-        status.present,
-        &status.source,
-        status.keychain_present,
-    )
-}
-
-fn tiktok_root_credential(
-    env_var: &'static str,
-    credential_store_service: &'static str,
-    credential_store_account: &'static str,
-    status: &TikTokSecretStatus,
-) -> RootCredentialStatus {
-    credential_status(
-        env_var,
-        credential_store_service,
-        credential_store_account,
-        status.present,
-        &status.source,
-        status.keychain_present,
-    )
-}
-
-fn pinterest_root_credential(
-    env_var: &'static str,
-    credential_store_service: &'static str,
-    credential_store_account: &'static str,
-    status: &PinterestSecretStatus,
-) -> RootCredentialStatus {
-    credential_status(
-        env_var,
-        credential_store_service,
-        credential_store_account,
-        status.present,
-        &status.source,
-        status.keychain_present,
-    )
-}
-
-fn serialized_source_name(source: &impl serde::Serialize) -> String {
-    serde_json::to_value(source)
+fn root_bundle_credential(env_var: &'static str, keychain_present: bool) -> RootCredentialStatus {
+    let shell_env_present = env::var(env_var)
         .ok()
-        .and_then(|value| value.as_str().map(str::to_string))
-        .unwrap_or_else(|| "unknown".to_string())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .is_some();
+
+    let source = if shell_env_present {
+        "shell_env"
+    } else if keychain_present {
+        "keychain"
+    } else {
+        "missing"
+    };
+
+    credential_status(
+        env_var,
+        shell_env_present || keychain_present,
+        source,
+        keychain_present,
+    )
+}
+
+fn credential_store_available(store_error: Option<&SecretStoreError>) -> bool {
+    store_error
+        .map(|error| error.kind() != SecretStoreErrorKind::Unavailable)
+        .unwrap_or(true)
+}
+
+fn credential_store_error(store_error: Option<&SecretStoreError>) -> Option<String> {
+    store_error.map(|error| error.to_string())
 }
 
 fn root_auth_state_label(state: RootAuthState) -> &'static str {
@@ -1526,14 +1708,18 @@ mod tests {
     use agent_ads_core::output::OutputFormat;
     use agent_ads_core::pinterest_config::PinterestConfigOverrides;
     use agent_ads_core::secret_store::{SecretStore, SecretStoreError};
+    use agent_ads_core::{
+        load_auth_bundle, store_auth_bundle, AuthBundle, GoogleAuthBundle, MetaAuthBundle,
+    };
     use clap::{Command, CommandFactory, Parser};
     use std::path::Path;
     use tempfile::tempdir;
 
     use super::{
-        build_root_auth_status, parse_root_auth_selection, resolve_google_output_format,
-        resolve_pinterest_output_format, root_auth_menu_items, should_run_interactive_root_auth,
-        Cli, RootAuthState,
+        build_root_auth_status, parse_root_auth_confirmation, parse_root_auth_selection,
+        resolve_google_output_format, resolve_pinterest_output_format, root_auth_clear_menu_items,
+        root_auth_menu_items, run_root_auth_delete_provider, should_run_interactive_root_auth,
+        validate_root_auth_clear_mode, Cli, OutputOptions, RootAuthProvider, RootAuthState,
     };
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -1542,9 +1728,14 @@ mod tests {
     struct FakeSecretStore {
         secrets: Mutex<HashMap<(String, String), String>>,
         get_error: Mutex<Option<SecretStoreError>>,
+        get_calls: Mutex<usize>,
     }
 
-    impl FakeSecretStore {}
+    impl FakeSecretStore {
+        fn get_call_count(&self) -> usize {
+            *self.get_calls.lock().unwrap()
+        }
+    }
 
     impl SecretStore for FakeSecretStore {
         fn get_secret(
@@ -1556,6 +1747,7 @@ mod tests {
                 return Err(error);
             }
 
+            *self.get_calls.lock().unwrap() += 1;
             Ok(self
                 .secrets
                 .lock()
@@ -1649,10 +1841,28 @@ mod tests {
     }
 
     #[test]
+    fn parses_root_auth_clear_command() {
+        let cli = Cli::try_parse_from(["agent-ads", "auth", "clear"]).unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Clear"));
+    }
+
+    #[test]
     fn root_auth_selection_parses_cancel_and_index() {
         assert_eq!(parse_root_auth_selection("q", 4).unwrap(), None);
         assert_eq!(parse_root_auth_selection("2", 4).unwrap(), Some(1));
         assert!(parse_root_auth_selection("9", 4).is_err());
+    }
+
+    #[test]
+    fn root_auth_confirmation_parses_clear_and_cancel() {
+        assert_eq!(parse_root_auth_confirmation("1").unwrap(), Some(true));
+        assert_eq!(parse_root_auth_confirmation("y").unwrap(), Some(true));
+        assert_eq!(parse_root_auth_confirmation("clear").unwrap(), Some(true));
+        assert_eq!(parse_root_auth_confirmation("2").unwrap(), None);
+        assert_eq!(parse_root_auth_confirmation("n").unwrap(), None);
+        assert_eq!(parse_root_auth_confirmation("").unwrap(), None);
+        assert!(parse_root_auth_confirmation("maybe").is_err());
     }
 
     #[test]
@@ -1662,6 +1872,13 @@ mod tests {
             false,
             Some(Path::new("out.json"))
         ));
+    }
+
+    #[test]
+    fn root_auth_clear_requires_interactive_terminal() {
+        let error = validate_root_auth_clear_mode(false, None).unwrap_err();
+        assert!(error.to_string().contains("agent-ads auth clear"));
+        assert!(error.to_string().contains("auth delete"));
     }
 
     #[test]
@@ -1695,6 +1912,80 @@ mod tests {
         assert!(items[0].contains("0/1"));
         assert!(items[1].contains("google"));
         assert!(items[1].contains("0/4"));
+    }
+
+    #[test]
+    fn root_auth_clear_menu_items_offer_clear_and_cancel() {
+        let items = root_auth_clear_menu_items(RootAuthProvider::Meta);
+
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0], "Clear stored meta credentials");
+        assert_eq!(items[1], "Cancel");
+    }
+
+    #[test]
+    fn root_auth_status_reads_bundle_once() {
+        let store = FakeSecretStore::default();
+        store_auth_bundle(
+            &store,
+            &AuthBundle {
+                meta: Some(MetaAuthBundle {
+                    access_token: Some("meta-token".to_string()),
+                }),
+                ..AuthBundle::default()
+            },
+        )
+        .unwrap();
+
+        let summaries = build_root_auth_status(&store);
+
+        assert_eq!(summaries.len(), 4);
+        assert_eq!(store.get_call_count(), 1);
+    }
+
+    #[test]
+    fn root_auth_help_lists_clear_command() {
+        let help = nested_help(&["auth"]);
+        assert!(help.contains("status"));
+        assert!(help.contains("clear"));
+    }
+
+    #[test]
+    fn root_auth_clear_dispatches_to_selected_provider_delete() {
+        let store = FakeSecretStore::default();
+        store_auth_bundle(
+            &store,
+            &AuthBundle {
+                meta: Some(MetaAuthBundle {
+                    access_token: Some("meta-token".to_string()),
+                }),
+                google: Some(GoogleAuthBundle {
+                    developer_token: Some("developer-token".to_string()),
+                    client_id: Some("client-id".to_string()),
+                    client_secret: Some("client-secret".to_string()),
+                    refresh_token: Some("refresh-token".to_string()),
+                }),
+                ..AuthBundle::default()
+            },
+        )
+        .unwrap();
+
+        let exit_code = run_root_auth_delete_provider(
+            RootAuthProvider::Google,
+            &store,
+            &OutputOptions {
+                format: OutputFormat::Json,
+                pretty: false,
+                envelope: false,
+                include_meta: false,
+                quiet: false,
+            },
+        );
+
+        assert_eq!(exit_code, std::process::ExitCode::SUCCESS);
+        let bundle = load_auth_bundle(&store).unwrap();
+        assert!(bundle.meta.is_some());
+        assert!(bundle.google.is_none());
     }
 
     #[test]

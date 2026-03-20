@@ -16,9 +16,7 @@ use agent_ads_core::tiktok_endpoints::{
 };
 use agent_ads_core::tiktok_error::TikTokError;
 use agent_ads_core::{
-    TIKTOK_ACCESS_TOKEN_ACCOUNT, TIKTOK_ACCESS_TOKEN_SERVICE, TIKTOK_APP_ID_ACCOUNT,
-    TIKTOK_APP_ID_SERVICE, TIKTOK_APP_SECRET_ACCOUNT, TIKTOK_APP_SECRET_SERVICE,
-    TIKTOK_REFRESH_TOKEN_ACCOUNT, TIKTOK_REFRESH_TOKEN_SERVICE,
+    load_auth_bundle, store_auth_bundle, AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
 use clap::{Args, Subcommand};
 use rpassword::prompt_password;
@@ -362,45 +360,27 @@ pub fn handle_auth(
     match command {
         AuthCommand::Set(args) => {
             let inputs = resolve_tiktok_auth_inputs(&args)?;
-            if let Some(app_id) = inputs.app_id.as_deref() {
-                secret_store
-                    .set_secret(TIKTOK_APP_ID_SERVICE, TIKTOK_APP_ID_ACCOUNT, app_id)
-                    .map_err(|error| tiktok_auth_storage_error("store app ID", &error))?;
-            }
-            if let Some(app_secret) = inputs.app_secret.as_deref() {
-                secret_store
-                    .set_secret(
-                        TIKTOK_APP_SECRET_SERVICE,
-                        TIKTOK_APP_SECRET_ACCOUNT,
-                        app_secret,
-                    )
-                    .map_err(|error| tiktok_auth_storage_error("store app secret", &error))?;
-            }
-            secret_store
-                .set_secret(
-                    TIKTOK_ACCESS_TOKEN_SERVICE,
-                    TIKTOK_ACCESS_TOKEN_ACCOUNT,
-                    &inputs.access_token,
-                )
-                .map_err(|error| tiktok_auth_storage_error("store access token", &error))?;
+            let mut bundle = load_auth_bundle(secret_store)
+                .map_err(|error| tiktok_auth_storage_error("store TikTok credentials", &error))?;
+            let mut tiktok_bundle = bundle.tiktok.take().unwrap_or_default();
 
             let mut credentials_stored = vec!["access_token"];
-            if inputs.app_id.is_some() {
+            tiktok_bundle.access_token = Some(inputs.access_token);
+            if let Some(app_id) = inputs.app_id {
+                tiktok_bundle.app_id = Some(app_id);
                 credentials_stored.push("app_id");
             }
-            if inputs.app_secret.is_some() {
+            if let Some(app_secret) = inputs.app_secret {
+                tiktok_bundle.app_secret = Some(app_secret);
                 credentials_stored.push("app_secret");
             }
-            if let Some(refresh_token) = inputs.refresh_token.as_deref() {
-                secret_store
-                    .set_secret(
-                        TIKTOK_REFRESH_TOKEN_SERVICE,
-                        TIKTOK_REFRESH_TOKEN_ACCOUNT,
-                        refresh_token,
-                    )
-                    .map_err(|error| tiktok_auth_storage_error("store refresh token", &error))?;
+            if let Some(refresh_token) = inputs.refresh_token {
+                tiktok_bundle.refresh_token = Some(refresh_token);
                 credentials_stored.push("refresh_token");
             }
+            bundle.tiktok = Some(tiktok_bundle);
+            store_auth_bundle(secret_store, &bundle)
+                .map_err(|error| tiktok_auth_storage_error("store TikTok credentials", &error))?;
 
             Ok(tiktok_command_result(
                 json!({
@@ -418,18 +398,27 @@ pub fn handle_auth(
             0,
         )),
         AuthCommand::Delete => {
-            let deleted_app_id = secret_store
-                .delete_secret(TIKTOK_APP_ID_SERVICE, TIKTOK_APP_ID_ACCOUNT)
-                .map_err(|error| tiktok_auth_storage_error("delete app ID", &error))?;
-            let deleted_app_secret = secret_store
-                .delete_secret(TIKTOK_APP_SECRET_SERVICE, TIKTOK_APP_SECRET_ACCOUNT)
-                .map_err(|error| tiktok_auth_storage_error("delete app secret", &error))?;
-            let deleted_access = secret_store
-                .delete_secret(TIKTOK_ACCESS_TOKEN_SERVICE, TIKTOK_ACCESS_TOKEN_ACCOUNT)
-                .map_err(|error| tiktok_auth_storage_error("delete access token", &error))?;
-            let deleted_refresh = secret_store
-                .delete_secret(TIKTOK_REFRESH_TOKEN_SERVICE, TIKTOK_REFRESH_TOKEN_ACCOUNT)
-                .map_err(|error| tiktok_auth_storage_error("delete refresh token", &error))?;
+            let mut bundle = load_auth_bundle(secret_store)
+                .map_err(|error| tiktok_auth_storage_error("delete TikTok credentials", &error))?;
+            let deleted_tiktok = bundle.tiktok.take();
+            let deleted_app_id = deleted_tiktok
+                .as_ref()
+                .and_then(|tiktok| tiktok.app_id.as_ref())
+                .is_some();
+            let deleted_app_secret = deleted_tiktok
+                .as_ref()
+                .and_then(|tiktok| tiktok.app_secret.as_ref())
+                .is_some();
+            let deleted_access = deleted_tiktok
+                .as_ref()
+                .and_then(|tiktok| tiktok.access_token.as_ref())
+                .is_some();
+            let deleted_refresh = deleted_tiktok
+                .as_ref()
+                .and_then(|tiktok| tiktok.refresh_token.as_ref())
+                .is_some();
+            store_auth_bundle(secret_store, &bundle)
+                .map_err(|error| tiktok_auth_storage_error("delete TikTok credentials", &error))?;
 
             Ok(tiktok_command_result(
                 json!({
@@ -467,25 +456,17 @@ pub async fn handle_auth_refresh(
     )
     .await?;
 
-    // Store the new access token
-    secret_store
-        .set_secret(
-            TIKTOK_ACCESS_TOKEN_SERVICE,
-            TIKTOK_ACCESS_TOKEN_ACCOUNT,
-            &result.access_token,
-        )
+    let mut bundle = load_auth_bundle(secret_store)
         .map_err(|error| tiktok_auth_storage_error("store refreshed access token", &error))?;
+    let mut tiktok_bundle = bundle.tiktok.take().unwrap_or_default();
+    tiktok_bundle.access_token = Some(result.access_token.clone());
 
-    // Store the new refresh token if returned
     if let Some(new_refresh) = &result.refresh_token {
-        secret_store
-            .set_secret(
-                TIKTOK_REFRESH_TOKEN_SERVICE,
-                TIKTOK_REFRESH_TOKEN_ACCOUNT,
-                new_refresh,
-            )
-            .map_err(|error| tiktok_auth_storage_error("store new refresh token", &error))?;
+        tiktok_bundle.refresh_token = Some(new_refresh.clone());
     }
+    bundle.tiktok = Some(tiktok_bundle);
+    store_auth_bundle(secret_store, &bundle)
+        .map_err(|error| tiktok_auth_storage_error("store refreshed access token", &error))?;
 
     Ok(command_result(
         json!({
@@ -1125,33 +1106,40 @@ pub fn resolve_auth_refresh_inputs(
     args: &AuthRefreshArgs,
     secret_store: &dyn SecretStore,
 ) -> Result<ResolvedAuthRefreshInputs, TikTokError> {
+    let bundle_result = load_auth_bundle(secret_store);
+    let bundle = bundle_result.as_ref().ok();
+    let store_error = bundle_result.as_ref().err().cloned();
+
     Ok(ResolvedAuthRefreshInputs {
         app_id: resolve_refresh_secret(
             args.app_id.as_deref(),
             TIKTOK_ADS_APP_ID_ENV_VAR,
-            TIKTOK_APP_ID_SERVICE,
-            TIKTOK_APP_ID_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.tiktok.as_ref())
+                .and_then(|tiktok| tiktok.app_id.clone()),
             "app ID",
             "Pass --app-id, export TIKTOK_ADS_APP_ID, or run `agent-ads tiktok auth set --full` first.",
-            secret_store,
+            store_error.clone(),
         )?,
         app_secret: resolve_refresh_secret(
             args.app_secret.as_deref(),
             TIKTOK_ADS_APP_SECRET_ENV_VAR,
-            TIKTOK_APP_SECRET_SERVICE,
-            TIKTOK_APP_SECRET_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.tiktok.as_ref())
+                .and_then(|tiktok| tiktok.app_secret.clone()),
             "app secret",
             "Pass --app-secret, export TIKTOK_ADS_APP_SECRET, or run `agent-ads tiktok auth set --full` first.",
-            secret_store,
+            store_error.clone(),
         )?,
         refresh_token: resolve_refresh_secret(
             None,
             TIKTOK_ADS_REFRESH_TOKEN_ENV_VAR,
-            TIKTOK_REFRESH_TOKEN_SERVICE,
-            TIKTOK_REFRESH_TOKEN_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.tiktok.as_ref())
+                .and_then(|tiktok| tiktok.refresh_token.clone()),
             "refresh token",
             "Export TIKTOK_ADS_REFRESH_TOKEN or run `agent-ads tiktok auth set --full` or `agent-ads tiktok auth set --refresh-token` first.",
-            secret_store,
+            store_error,
         )?,
     })
 }
@@ -1159,11 +1147,10 @@ pub fn resolve_auth_refresh_inputs(
 fn resolve_refresh_secret(
     direct_value: Option<&str>,
     env_var: &str,
-    service: &str,
-    account: &str,
+    keychain_value: Option<String>,
     label: &str,
     missing_guidance: &str,
-    secret_store: &dyn SecretStore,
+    store_error: Option<agent_ads_core::SecretStoreError>,
 ) -> Result<String, TikTokError> {
     if let Some(value) = direct_value {
         return normalize_tiktok_value(value, label);
@@ -1177,14 +1164,15 @@ fn resolve_refresh_secret(
         return Ok(value);
     }
 
-    match secret_store.get_secret(service, account) {
-        Ok(Some(value)) => Ok(value),
-        Ok(None) => Err(TikTokError::Config(format!(
+    match (keychain_value, store_error) {
+        (Some(value), None) => Ok(value),
+        (None, None) => Err(TikTokError::Config(format!(
             "{env_var} is missing and no TikTok {label} was found in the OS credential store. {missing_guidance}"
         ))),
-        Err(error) => Err(TikTokError::Config(format!(
+        (None, Some(error)) => Err(TikTokError::Config(format!(
             "{env_var} is missing and the OS credential store could not be read: {error}. {missing_guidance}"
         ))),
+        (Some(value), Some(_)) => Ok(value),
     }
 }
 
@@ -1288,8 +1276,8 @@ fn tiktok_auth_status_payload(auth: TikTokAuthSnapshot) -> Value {
         "credentials": {
             "app_id": {
                 "env_var": TIKTOK_ADS_APP_ID_ENV_VAR,
-                "credential_store_service": TIKTOK_APP_ID_SERVICE,
-                "credential_store_account": TIKTOK_APP_ID_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.app_id.present,
                 "source": auth.app_id.source,
                 "keychain_present": auth.app_id.keychain_present,
@@ -1297,8 +1285,8 @@ fn tiktok_auth_status_payload(auth: TikTokAuthSnapshot) -> Value {
             },
             "app_secret": {
                 "env_var": TIKTOK_ADS_APP_SECRET_ENV_VAR,
-                "credential_store_service": TIKTOK_APP_SECRET_SERVICE,
-                "credential_store_account": TIKTOK_APP_SECRET_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.app_secret.present,
                 "source": auth.app_secret.source,
                 "keychain_present": auth.app_secret.keychain_present,
@@ -1306,8 +1294,8 @@ fn tiktok_auth_status_payload(auth: TikTokAuthSnapshot) -> Value {
             },
             "access_token": {
                 "env_var": TIKTOK_ADS_ACCESS_TOKEN_ENV_VAR,
-                "credential_store_service": TIKTOK_ACCESS_TOKEN_SERVICE,
-                "credential_store_account": TIKTOK_ACCESS_TOKEN_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.access_token.present,
                 "source": auth.access_token.source,
                 "keychain_present": auth.access_token.keychain_present,
@@ -1315,8 +1303,8 @@ fn tiktok_auth_status_payload(auth: TikTokAuthSnapshot) -> Value {
             },
             "refresh_token": {
                 "env_var": TIKTOK_ADS_REFRESH_TOKEN_ENV_VAR,
-                "credential_store_service": TIKTOK_REFRESH_TOKEN_SERVICE,
-                "credential_store_account": TIKTOK_REFRESH_TOKEN_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.refresh_token.present,
                 "source": auth.refresh_token.source,
                 "keychain_present": auth.refresh_token.keychain_present,
@@ -1333,6 +1321,7 @@ mod tests {
     use std::sync::Mutex;
 
     use agent_ads_core::secret_store::{SecretStore, SecretStoreError};
+    use agent_ads_core::{load_auth_bundle, store_auth_bundle, AuthBundle, TikTokAuthBundle};
     use serde_json::json;
     use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -1461,27 +1450,19 @@ mod tests {
     #[test]
     fn resolve_auth_refresh_inputs_uses_stored_credentials() {
         let store = FakeSecretStore::default();
-        store
-            .set_secret(
-                TIKTOK_APP_ID_SERVICE,
-                TIKTOK_APP_ID_ACCOUNT,
-                "stored-app-id",
-            )
-            .unwrap();
-        store
-            .set_secret(
-                TIKTOK_APP_SECRET_SERVICE,
-                TIKTOK_APP_SECRET_ACCOUNT,
-                "stored-app-secret",
-            )
-            .unwrap();
-        store
-            .set_secret(
-                TIKTOK_REFRESH_TOKEN_SERVICE,
-                TIKTOK_REFRESH_TOKEN_ACCOUNT,
-                "stored-refresh-token",
-            )
-            .unwrap();
+        store_auth_bundle(
+            &store,
+            &AuthBundle {
+                tiktok: Some(TikTokAuthBundle {
+                    app_id: Some("stored-app-id".to_string()),
+                    app_secret: Some("stored-app-secret".to_string()),
+                    refresh_token: Some("stored-refresh-token".to_string()),
+                    ..TikTokAuthBundle::default()
+                }),
+                ..AuthBundle::default()
+            },
+        )
+        .unwrap();
 
         let inputs = resolve_auth_refresh_inputs(
             &AuthRefreshArgs {
@@ -1569,20 +1550,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.exit_code, 0);
-        assert_eq!(
-            store
-                .get_secret(TIKTOK_ACCESS_TOKEN_SERVICE, TIKTOK_ACCESS_TOKEN_ACCOUNT)
-                .unwrap()
-                .as_deref(),
-            Some("new-access-token")
-        );
-        assert_eq!(
-            store
-                .get_secret(TIKTOK_REFRESH_TOKEN_SERVICE, TIKTOK_REFRESH_TOKEN_ACCOUNT)
-                .unwrap()
-                .as_deref(),
-            Some("new-refresh-token")
-        );
+        let bundle = load_auth_bundle(&store).unwrap();
+        let tiktok = bundle.tiktok.unwrap();
+        assert_eq!(tiktok.access_token.as_deref(), Some("new-access-token"));
+        assert_eq!(tiktok.refresh_token.as_deref(), Some("new-refresh-token"));
         assert_eq!(result.envelope.meta.api_version, "v9.9");
     }
 }

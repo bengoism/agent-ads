@@ -45,7 +45,15 @@ For a machine-readable summary:
 agent-ads auth status
 ```
 
+To clear stored credentials for one provider via the same picker:
+
+```bash
+agent-ads auth clear
+```
+
 Provider-native auth commands remain canonical for CI and explicit scripting: `agent-ads <provider> auth ...`.
+
+Auth storage now uses one serialized credential-store bundle. If you stored credentials with an older build that wrote one keychain entry per secret, re-run the relevant `auth set` flow once because legacy entries are no longer read.
 
 ## Quick Start (Meta)
 
@@ -378,6 +386,7 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 |---------|-------------|
 | `agent-ads auth` | Show aggregated auth status and route into setup |
 | `agent-ads auth status` | Show aggregated auth status across implemented providers |
+| `agent-ads auth clear` | Pick one provider and clear its stored credentials |
 | `agent-ads providers list` | Show available and planned providers |
 | `agent-ads meta ...` | Meta Marketing API commands |
 | `agent-ads google ...` | Google Ads commands |
@@ -542,7 +551,7 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 
 Secrets resolve per provider: shell environment first, then OS credential store. `.env` files are not read. Secrets are never read from config files or CLI flags.
 
-Store credentials persistently with `agent-ads auth` for guided local setup or `agent-ads <provider> auth set` for explicit provider setup. Override in CI or one-off sessions with shell env vars (shown in each Quick Start above).
+Store credentials persistently with `agent-ads auth` for guided local setup, clear one provider with `agent-ads auth clear`, or use `agent-ads <provider> auth set` / `agent-ads <provider> auth delete` for explicit provider flows. Override in CI or one-off sessions with shell env vars (shown in each Quick Start above).
 
 ### Non-secret precedence
 

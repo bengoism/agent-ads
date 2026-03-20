@@ -3,15 +3,11 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::auth_bundle::load_auth_bundle;
 use crate::config::{load_root_file_config, DEFAULT_CONFIG_FILE};
 use crate::output::OutputFormat;
 use crate::pinterest_error::{PinterestError, PinterestResult};
-use crate::secret_store::{
-    SecretStore, SecretStoreError, SecretStoreErrorKind, PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
-    PINTEREST_ADS_ACCESS_TOKEN_SERVICE, PINTEREST_ADS_APP_ID_ACCOUNT, PINTEREST_ADS_APP_ID_SERVICE,
-    PINTEREST_ADS_APP_SECRET_ACCOUNT, PINTEREST_ADS_APP_SECRET_SERVICE,
-    PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT, PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
-};
+use crate::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
 
 pub const PINTEREST_DEFAULT_API_BASE_URL: &str = "https://api.pinterest.com";
 pub const PINTEREST_DEFAULT_API_VERSION: &str = "v5";
@@ -232,45 +228,54 @@ fn pinterest_inspect_with_auth(
 }
 
 fn resolve_pinterest_auth(secret_store: &dyn SecretStore) -> PinterestAuthResolution {
+    let bundle_result = load_auth_bundle(secret_store);
+    let bundle = bundle_result.as_ref().ok();
+    let store_error = bundle_result.as_ref().err().cloned();
+
     PinterestAuthResolution {
         app_id: resolve_secret(
-            secret_store,
             PINTEREST_ADS_APP_ID_ENV_VAR,
-            PINTEREST_ADS_APP_ID_SERVICE,
-            PINTEREST_ADS_APP_ID_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.pinterest.as_ref())
+                .and_then(|pinterest| pinterest.app_id.clone()),
+            store_error.clone(),
         ),
         app_secret: resolve_secret(
-            secret_store,
             PINTEREST_ADS_APP_SECRET_ENV_VAR,
-            PINTEREST_ADS_APP_SECRET_SERVICE,
-            PINTEREST_ADS_APP_SECRET_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.pinterest.as_ref())
+                .and_then(|pinterest| pinterest.app_secret.clone()),
+            store_error.clone(),
         ),
         access_token: resolve_secret(
-            secret_store,
             PINTEREST_ADS_ACCESS_TOKEN_ENV_VAR,
-            PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
-            PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.pinterest.as_ref())
+                .and_then(|pinterest| pinterest.access_token.clone()),
+            store_error.clone(),
         ),
         refresh_token: resolve_secret(
-            secret_store,
             PINTEREST_ADS_REFRESH_TOKEN_ENV_VAR,
-            PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
-            PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.pinterest.as_ref())
+                .and_then(|pinterest| pinterest.refresh_token.clone()),
+            store_error,
         ),
     }
 }
 
 fn resolve_secret(
-    secret_store: &dyn SecretStore,
     env_var: &str,
-    service: &str,
-    account: &str,
+    keychain_value: Option<String>,
+    store_error: Option<SecretStoreError>,
 ) -> PinterestSecretResolution {
-    let shell_value = env::var(env_var).ok();
-    let keychain_result = secret_store.get_secret(service, account);
+    let shell_value = env::var(env_var)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
-    match (shell_value, keychain_result) {
-        (Some(shell_value), Ok(keychain_value)) => PinterestSecretResolution {
+    match (shell_value, keychain_value, store_error) {
+        (Some(shell_value), keychain_value, None) => PinterestSecretResolution {
             value: Some(shell_value),
             status: PinterestSecretStatus {
                 present: true,
@@ -279,7 +284,7 @@ fn resolve_secret(
             },
             store_error: None,
         },
-        (Some(shell_value), Err(error)) => PinterestSecretResolution {
+        (Some(shell_value), _, Some(error)) => PinterestSecretResolution {
             value: Some(shell_value),
             status: PinterestSecretStatus {
                 present: true,
@@ -288,7 +293,7 @@ fn resolve_secret(
             },
             store_error: Some(error),
         },
-        (None, Ok(Some(keychain_value))) => PinterestSecretResolution {
+        (None, Some(keychain_value), None) => PinterestSecretResolution {
             value: Some(keychain_value),
             status: PinterestSecretStatus {
                 present: true,
@@ -297,7 +302,7 @@ fn resolve_secret(
             },
             store_error: None,
         },
-        (None, Ok(None)) => PinterestSecretResolution {
+        (None, None, None) => PinterestSecretResolution {
             value: None,
             status: PinterestSecretStatus {
                 present: false,
@@ -306,7 +311,7 @@ fn resolve_secret(
             },
             store_error: None,
         },
-        (None, Err(error)) => PinterestSecretResolution {
+        (None, None, Some(error)) => PinterestSecretResolution {
             value: None,
             status: PinterestSecretStatus {
                 present: false,
@@ -314,6 +319,15 @@ fn resolve_secret(
                 keychain_present: false,
             },
             store_error: Some(error),
+        },
+        (None, Some(keychain_value), Some(_)) => PinterestSecretResolution {
+            value: Some(keychain_value),
+            status: PinterestSecretStatus {
+                present: true,
+                source: PinterestSecretSource::Keychain,
+                keychain_present: true,
+            },
+            store_error: None,
         },
     }
 }
@@ -371,10 +385,8 @@ mod tests {
 
     use super::{pinterest_inspect, PinterestConfigOverrides, PinterestResolvedConfig};
     use crate::output::OutputFormat;
-    use crate::secret_store::{
-        SecretStore, SecretStoreError, SecretStoreErrorKind, PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
-        PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
-    };
+    use crate::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
+    use crate::{store_auth_bundle, AuthBundle, PinterestAuthBundle};
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
@@ -387,13 +399,17 @@ mod tests {
     impl FakeSecretStore {
         fn with_access_token(access_token: &str) -> Self {
             let store = Self::default();
-            store.secrets.lock().unwrap().insert(
-                (
-                    PINTEREST_ADS_ACCESS_TOKEN_SERVICE.to_string(),
-                    PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT.to_string(),
-                ),
-                access_token.to_string(),
-            );
+            store_auth_bundle(
+                &store,
+                &AuthBundle {
+                    pinterest: Some(PinterestAuthBundle {
+                        access_token: Some(access_token.to_string()),
+                        ..PinterestAuthBundle::default()
+                    }),
+                    ..AuthBundle::default()
+                },
+            )
+            .unwrap();
             store
         }
 

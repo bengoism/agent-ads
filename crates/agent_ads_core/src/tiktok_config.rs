@@ -3,14 +3,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::auth_bundle::load_auth_bundle;
 use crate::config::{load_root_file_config, DEFAULT_CONFIG_FILE};
 use crate::output::OutputFormat;
-use crate::secret_store::{
-    SecretStore, SecretStoreError, SecretStoreErrorKind, TIKTOK_ACCESS_TOKEN_ACCOUNT,
-    TIKTOK_ACCESS_TOKEN_SERVICE, TIKTOK_APP_ID_ACCOUNT, TIKTOK_APP_ID_SERVICE,
-    TIKTOK_APP_SECRET_ACCOUNT, TIKTOK_APP_SECRET_SERVICE, TIKTOK_REFRESH_TOKEN_ACCOUNT,
-    TIKTOK_REFRESH_TOKEN_SERVICE,
-};
+use crate::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
 use crate::tiktok_error::{TikTokError, TikTokResult};
 
 pub const TIKTOK_DEFAULT_API_BASE_URL: &str = "https://business-api.tiktok.com";
@@ -259,12 +255,15 @@ fn tiktok_inspect_with_status(
 }
 
 fn resolve_tiktok_access_token(secret_store: &dyn SecretStore) -> TikTokAccessTokenResolution {
-    let resolution = resolve_tiktok_secret(
-        TIKTOK_ADS_ACCESS_TOKEN_ENV_VAR,
-        TIKTOK_ACCESS_TOKEN_SERVICE,
-        TIKTOK_ACCESS_TOKEN_ACCOUNT,
-        secret_store,
-    );
+    let bundle_result = load_auth_bundle(secret_store);
+    let keychain_value = bundle_result
+        .as_ref()
+        .ok()
+        .and_then(|bundle| bundle.tiktok.as_ref())
+        .and_then(|tiktok| tiktok.access_token.clone());
+    let store_error = bundle_result.err();
+    let resolution =
+        resolve_tiktok_secret(TIKTOK_ADS_ACCESS_TOKEN_ENV_VAR, keychain_value, store_error);
 
     TikTokAccessTokenResolution {
         token: resolution.value,
@@ -287,48 +286,54 @@ fn resolve_tiktok_access_token(secret_store: &dyn SecretStore) -> TikTokAccessTo
 }
 
 fn resolve_tiktok_auth(secret_store: &dyn SecretStore) -> TikTokAuthResolution {
+    let bundle_result = load_auth_bundle(secret_store);
+    let bundle = bundle_result.as_ref().ok();
+    let store_error = bundle_result.as_ref().err().cloned();
+
     TikTokAuthResolution {
         app_id: resolve_tiktok_secret(
             TIKTOK_ADS_APP_ID_ENV_VAR,
-            TIKTOK_APP_ID_SERVICE,
-            TIKTOK_APP_ID_ACCOUNT,
-            secret_store,
+            bundle
+                .and_then(|bundle| bundle.tiktok.as_ref())
+                .and_then(|tiktok| tiktok.app_id.clone()),
+            store_error.clone(),
         ),
         app_secret: resolve_tiktok_secret(
             TIKTOK_ADS_APP_SECRET_ENV_VAR,
-            TIKTOK_APP_SECRET_SERVICE,
-            TIKTOK_APP_SECRET_ACCOUNT,
-            secret_store,
+            bundle
+                .and_then(|bundle| bundle.tiktok.as_ref())
+                .and_then(|tiktok| tiktok.app_secret.clone()),
+            store_error.clone(),
         ),
         access_token: resolve_tiktok_secret(
             TIKTOK_ADS_ACCESS_TOKEN_ENV_VAR,
-            TIKTOK_ACCESS_TOKEN_SERVICE,
-            TIKTOK_ACCESS_TOKEN_ACCOUNT,
-            secret_store,
+            bundle
+                .and_then(|bundle| bundle.tiktok.as_ref())
+                .and_then(|tiktok| tiktok.access_token.clone()),
+            store_error.clone(),
         ),
         refresh_token: resolve_tiktok_secret(
             TIKTOK_ADS_REFRESH_TOKEN_ENV_VAR,
-            TIKTOK_REFRESH_TOKEN_SERVICE,
-            TIKTOK_REFRESH_TOKEN_ACCOUNT,
-            secret_store,
+            bundle
+                .and_then(|bundle| bundle.tiktok.as_ref())
+                .and_then(|tiktok| tiktok.refresh_token.clone()),
+            store_error,
         ),
     }
 }
 
 fn resolve_tiktok_secret(
     env_var: &str,
-    service: &str,
-    account: &str,
-    secret_store: &dyn SecretStore,
+    keychain_value: Option<String>,
+    store_error: Option<SecretStoreError>,
 ) -> TikTokSecretResolution {
     let shell_value = env::var(env_var)
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
-    let keychain_result = secret_store.get_secret(service, account);
 
-    match (shell_value, keychain_result) {
-        (Some(shell_value), Ok(keychain_value)) => TikTokSecretResolution {
+    match (shell_value, keychain_value, store_error) {
+        (Some(shell_value), keychain_value, None) => TikTokSecretResolution {
             value: Some(shell_value),
             status: TikTokSecretStatus {
                 present: true,
@@ -337,7 +342,7 @@ fn resolve_tiktok_secret(
             },
             store_error: None,
         },
-        (Some(shell_value), Err(error)) => TikTokSecretResolution {
+        (Some(shell_value), _, Some(error)) => TikTokSecretResolution {
             value: Some(shell_value),
             status: TikTokSecretStatus {
                 present: true,
@@ -346,7 +351,7 @@ fn resolve_tiktok_secret(
             },
             store_error: Some(error),
         },
-        (None, Ok(Some(keychain_value))) => TikTokSecretResolution {
+        (None, Some(keychain_value), None) => TikTokSecretResolution {
             value: Some(keychain_value),
             status: TikTokSecretStatus {
                 present: true,
@@ -355,7 +360,7 @@ fn resolve_tiktok_secret(
             },
             store_error: None,
         },
-        (None, Ok(None)) => TikTokSecretResolution {
+        (None, None, None) => TikTokSecretResolution {
             value: None,
             status: TikTokSecretStatus {
                 present: false,
@@ -364,7 +369,7 @@ fn resolve_tiktok_secret(
             },
             store_error: None,
         },
-        (None, Err(error)) => TikTokSecretResolution {
+        (None, None, Some(error)) => TikTokSecretResolution {
             value: None,
             status: TikTokSecretStatus {
                 present: false,
@@ -372,6 +377,15 @@ fn resolve_tiktok_secret(
                 keychain_present: false,
             },
             store_error: Some(error),
+        },
+        (None, Some(keychain_value), Some(_)) => TikTokSecretResolution {
+            value: Some(keychain_value),
+            status: TikTokSecretStatus {
+                present: true,
+                source: TikTokSecretSource::Keychain,
+                keychain_present: true,
+            },
+            store_error: None,
         },
     }
 }
@@ -420,10 +434,8 @@ mod tests {
         TikTokResolvedConfig, TikTokSecretSource, TIKTOK_ADS_ACCESS_TOKEN_ENV_VAR,
         TIKTOK_ADS_APP_ID_ENV_VAR,
     };
-    use crate::secret_store::{
-        SecretStore, SecretStoreError, SecretStoreErrorKind, TIKTOK_ACCESS_TOKEN_ACCOUNT,
-        TIKTOK_ACCESS_TOKEN_SERVICE, TIKTOK_APP_ID_ACCOUNT, TIKTOK_APP_ID_SERVICE,
-    };
+    use crate::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
+    use crate::{store_auth_bundle, AuthBundle, TikTokAuthBundle};
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
@@ -436,13 +448,17 @@ mod tests {
     impl FakeSecretStore {
         fn with_access_token(access_token: &str) -> Self {
             let store = Self::default();
-            store.secrets.lock().unwrap().insert(
-                (
-                    TIKTOK_ACCESS_TOKEN_SERVICE.to_string(),
-                    TIKTOK_ACCESS_TOKEN_ACCOUNT.to_string(),
-                ),
-                access_token.to_string(),
-            );
+            store_auth_bundle(
+                &store,
+                &AuthBundle {
+                    tiktok: Some(TikTokAuthBundle {
+                        access_token: Some(access_token.to_string()),
+                        ..TikTokAuthBundle::default()
+                    }),
+                    ..AuthBundle::default()
+                },
+            )
+            .unwrap();
             store
         }
 
@@ -546,13 +562,17 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         env::set_var(TIKTOK_ADS_APP_ID_ENV_VAR, "env-app-id");
         let store = FakeSecretStore::default();
-        store
-            .set_secret(
-                TIKTOK_APP_ID_SERVICE,
-                TIKTOK_APP_ID_ACCOUNT,
-                "stored-app-id",
-            )
-            .unwrap();
+        store_auth_bundle(
+            &store,
+            &AuthBundle {
+                tiktok: Some(TikTokAuthBundle {
+                    app_id: Some("stored-app-id".to_string()),
+                    ..TikTokAuthBundle::default()
+                }),
+                ..AuthBundle::default()
+            },
+        )
+        .unwrap();
 
         let snapshot = tiktok_inspect_auth(&store);
 

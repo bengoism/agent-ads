@@ -14,11 +14,9 @@ use agent_ads_core::pinterest_endpoints::{
 };
 use agent_ads_core::secret_store::SecretStore;
 use agent_ads_core::{
-    pinterest_refresh_access_token, PinterestClient, PinterestError, PinterestRefreshResult,
-    PinterestResponse, PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT, PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
-    PINTEREST_ADS_APP_ID_ACCOUNT, PINTEREST_ADS_APP_ID_SERVICE, PINTEREST_ADS_APP_SECRET_ACCOUNT,
-    PINTEREST_ADS_APP_SECRET_SERVICE, PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
-    PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
+    load_auth_bundle, pinterest_refresh_access_token, store_auth_bundle, PinterestAuthBundle,
+    PinterestClient, PinterestError, PinterestRefreshResult, PinterestResponse,
+    AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
 use clap::{Args, Subcommand, ValueEnum};
 use rpassword::prompt_password;
@@ -562,34 +560,18 @@ pub fn handle_auth(
     match command {
         AuthCommand::Set(args) => {
             let inputs = resolve_pinterest_auth_inputs(&args)?;
-            secret_store
-                .set_secret(
-                    PINTEREST_ADS_APP_ID_SERVICE,
-                    PINTEREST_ADS_APP_ID_ACCOUNT,
-                    &inputs.app_id,
-                )
-                .map_err(|error| pinterest_auth_storage_error("store app ID", &error))?;
-            secret_store
-                .set_secret(
-                    PINTEREST_ADS_APP_SECRET_SERVICE,
-                    PINTEREST_ADS_APP_SECRET_ACCOUNT,
-                    &inputs.app_secret,
-                )
-                .map_err(|error| pinterest_auth_storage_error("store app secret", &error))?;
-            secret_store
-                .set_secret(
-                    PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
-                    PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
-                    &inputs.access_token,
-                )
-                .map_err(|error| pinterest_auth_storage_error("store access token", &error))?;
-            secret_store
-                .set_secret(
-                    PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
-                    PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
-                    &inputs.refresh_token,
-                )
-                .map_err(|error| pinterest_auth_storage_error("store refresh token", &error))?;
+            let mut bundle = load_auth_bundle(secret_store).map_err(|error| {
+                pinterest_auth_storage_error("store Pinterest credentials", &error)
+            })?;
+            bundle.pinterest = Some(PinterestAuthBundle {
+                app_id: Some(inputs.app_id),
+                app_secret: Some(inputs.app_secret),
+                access_token: Some(inputs.access_token),
+                refresh_token: Some(inputs.refresh_token),
+            });
+            store_auth_bundle(secret_store, &bundle).map_err(|error| {
+                pinterest_auth_storage_error("store Pinterest credentials", &error)
+            })?;
 
             Ok(pinterest_command_result(
                 json!({
@@ -612,27 +594,29 @@ pub fn handle_auth(
             0,
         )),
         AuthCommand::Delete => {
-            let deleted_app_id = secret_store
-                .delete_secret(PINTEREST_ADS_APP_ID_SERVICE, PINTEREST_ADS_APP_ID_ACCOUNT)
-                .map_err(|error| pinterest_auth_storage_error("delete app ID", &error))?;
-            let deleted_app_secret = secret_store
-                .delete_secret(
-                    PINTEREST_ADS_APP_SECRET_SERVICE,
-                    PINTEREST_ADS_APP_SECRET_ACCOUNT,
-                )
-                .map_err(|error| pinterest_auth_storage_error("delete app secret", &error))?;
-            let deleted_access_token = secret_store
-                .delete_secret(
-                    PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
-                    PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
-                )
-                .map_err(|error| pinterest_auth_storage_error("delete access token", &error))?;
-            let deleted_refresh_token = secret_store
-                .delete_secret(
-                    PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
-                    PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
-                )
-                .map_err(|error| pinterest_auth_storage_error("delete refresh token", &error))?;
+            let mut bundle = load_auth_bundle(secret_store).map_err(|error| {
+                pinterest_auth_storage_error("delete Pinterest credentials", &error)
+            })?;
+            let deleted_pinterest = bundle.pinterest.take();
+            let deleted_app_id = deleted_pinterest
+                .as_ref()
+                .and_then(|pinterest| pinterest.app_id.as_ref())
+                .is_some();
+            let deleted_app_secret = deleted_pinterest
+                .as_ref()
+                .and_then(|pinterest| pinterest.app_secret.as_ref())
+                .is_some();
+            let deleted_access_token = deleted_pinterest
+                .as_ref()
+                .and_then(|pinterest| pinterest.access_token.as_ref())
+                .is_some();
+            let deleted_refresh_token = deleted_pinterest
+                .as_ref()
+                .and_then(|pinterest| pinterest.refresh_token.as_ref())
+                .is_some();
+            store_auth_bundle(secret_store, &bundle).map_err(|error| {
+                pinterest_auth_storage_error("delete Pinterest credentials", &error)
+            })?;
 
             Ok(pinterest_command_result(
                 json!({
@@ -1356,23 +1340,17 @@ fn persist_pinterest_refresh(
     secret_store: &dyn SecretStore,
     refresh: &PinterestRefreshResult,
 ) -> Result<(), PinterestError> {
-    secret_store
-        .set_secret(
-            PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
-            PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
-            &refresh.access_token,
-        )
+    let mut bundle = load_auth_bundle(secret_store)
         .map_err(|error| pinterest_auth_storage_error("store refreshed access token", &error))?;
+    let mut pinterest_bundle = bundle.pinterest.take().unwrap_or_default();
+    pinterest_bundle.access_token = Some(refresh.access_token.clone());
 
     if let Some(new_refresh_token) = &refresh.refresh_token {
-        secret_store
-            .set_secret(
-                PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
-                PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
-                new_refresh_token,
-            )
-            .map_err(|error| pinterest_auth_storage_error("store new refresh token", &error))?;
+        pinterest_bundle.refresh_token = Some(new_refresh_token.clone());
     }
+    bundle.pinterest = Some(pinterest_bundle);
+    store_auth_bundle(secret_store, &bundle)
+        .map_err(|error| pinterest_auth_storage_error("store refreshed access token", &error))?;
 
     Ok(())
 }
@@ -1574,37 +1552,43 @@ fn normalize_secret(value: &str, label: &str) -> Result<String, PinterestError> 
 fn resolve_pinterest_refresh_auth(
     secret_store: &dyn SecretStore,
 ) -> Result<PinterestRefreshAuth, PinterestError> {
+    let bundle_result = load_auth_bundle(secret_store);
+    let bundle = bundle_result.as_ref().ok();
+    let store_error = bundle_result.as_ref().err().cloned();
+
     Ok(PinterestRefreshAuth {
         app_id: resolve_secret_value(
-            secret_store,
             PINTEREST_ADS_APP_ID_ENV_VAR,
-            PINTEREST_ADS_APP_ID_SERVICE,
-            PINTEREST_ADS_APP_ID_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.pinterest.as_ref())
+                .and_then(|pinterest| pinterest.app_id.clone()),
             "app ID",
+            store_error.clone(),
         )?,
         app_secret: resolve_secret_value(
-            secret_store,
             PINTEREST_ADS_APP_SECRET_ENV_VAR,
-            PINTEREST_ADS_APP_SECRET_SERVICE,
-            PINTEREST_ADS_APP_SECRET_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.pinterest.as_ref())
+                .and_then(|pinterest| pinterest.app_secret.clone()),
             "app secret",
+            store_error.clone(),
         )?,
         refresh_token: resolve_secret_value(
-            secret_store,
             PINTEREST_ADS_REFRESH_TOKEN_ENV_VAR,
-            PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
-            PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
+            bundle
+                .and_then(|bundle| bundle.pinterest.as_ref())
+                .and_then(|pinterest| pinterest.refresh_token.clone()),
             "refresh token",
+            store_error,
         )?,
     })
 }
 
 fn resolve_secret_value(
-    secret_store: &dyn SecretStore,
     env_var: &str,
-    service: &str,
-    account: &str,
+    keychain_value: Option<String>,
     label: &str,
+    store_error: Option<agent_ads_core::SecretStoreError>,
 ) -> Result<String, PinterestError> {
     if let Some(value) = env::var(env_var)
         .ok()
@@ -1614,12 +1598,16 @@ fn resolve_secret_value(
         return Ok(value);
     }
 
-    match secret_store.get_secret(service, account) {
-        Ok(Some(value)) if !value.trim().is_empty() => Ok(value),
-        Ok(Some(_)) | Ok(None) => Err(PinterestError::Config(format!(
+    match (keychain_value, store_error) {
+        (Some(value), None) if !value.trim().is_empty() => Ok(value),
+        (Some(_), None) | (None, None) => Err(PinterestError::Config(format!(
             "{env_var} is missing and no Pinterest {label} was found in the OS credential store. Export {env_var} or run `agent-ads pinterest auth set` first."
         ))),
-        Err(error) => Err(PinterestError::Config(format!(
+        (None, Some(error)) => Err(PinterestError::Config(format!(
+            "{env_var} is missing and the OS credential store could not be read: {error}. Export {env_var} or run `agent-ads pinterest auth set` first."
+        ))),
+        (Some(value), Some(_)) if !value.trim().is_empty() => Ok(value),
+        (Some(_), Some(error)) => Err(PinterestError::Config(format!(
             "{env_var} is missing and the OS credential store could not be read: {error}. Export {env_var} or run `agent-ads pinterest auth set` first."
         ))),
     }
@@ -1681,32 +1669,32 @@ fn pinterest_auth_status_payload(auth: PinterestAuthSnapshot) -> Value {
         "credentials": {
             "app_id": {
                 "env_var": PINTEREST_ADS_APP_ID_ENV_VAR,
-                "credential_store_service": PINTEREST_ADS_APP_ID_SERVICE,
-                "credential_store_account": PINTEREST_ADS_APP_ID_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.app_id.present,
                 "source": auth.app_id.source,
                 "keychain_present": auth.app_id.keychain_present,
             },
             "app_secret": {
                 "env_var": PINTEREST_ADS_APP_SECRET_ENV_VAR,
-                "credential_store_service": PINTEREST_ADS_APP_SECRET_SERVICE,
-                "credential_store_account": PINTEREST_ADS_APP_SECRET_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.app_secret.present,
                 "source": auth.app_secret.source,
                 "keychain_present": auth.app_secret.keychain_present,
             },
             "access_token": {
                 "env_var": PINTEREST_ADS_ACCESS_TOKEN_ENV_VAR,
-                "credential_store_service": PINTEREST_ADS_ACCESS_TOKEN_SERVICE,
-                "credential_store_account": PINTEREST_ADS_ACCESS_TOKEN_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.access_token.present,
                 "source": auth.access_token.source,
                 "keychain_present": auth.access_token.keychain_present,
             },
             "refresh_token": {
                 "env_var": PINTEREST_ADS_REFRESH_TOKEN_ENV_VAR,
-                "credential_store_service": PINTEREST_ADS_REFRESH_TOKEN_SERVICE,
-                "credential_store_account": PINTEREST_ADS_REFRESH_TOKEN_ACCOUNT,
+                "credential_store_service": AUTH_BUNDLE_SERVICE,
+                "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 "present": auth.refresh_token.present,
                 "source": auth.refresh_token.source,
                 "keychain_present": auth.refresh_token.keychain_present,

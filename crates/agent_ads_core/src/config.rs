@@ -4,13 +4,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::auth_bundle::load_auth_bundle;
 use crate::error::{MetaAdsError, Result};
 use crate::google_config::GoogleFileConfig;
 use crate::output::OutputFormat;
 use crate::pinterest_config::PinterestFileConfig;
-use crate::secret_store::{
-    SecretStore, SecretStoreErrorKind, META_ACCESS_TOKEN_ACCOUNT, META_ACCESS_TOKEN_SERVICE,
-};
+use crate::secret_store::{SecretStore, SecretStoreErrorKind};
 use crate::tiktok_config::TikTokFileConfig;
 
 pub const DEFAULT_CONFIG_FILE: &str = "agent-ads.config.json";
@@ -218,12 +217,19 @@ fn inspect_with_status(
 }
 
 fn resolve_access_token(secret_store: &dyn SecretStore) -> AccessTokenResolution {
-    let shell_token = env::var(ACCESS_TOKEN_ENV_VAR).ok();
-    let keychain_result =
-        secret_store.get_secret(META_ACCESS_TOKEN_SERVICE, META_ACCESS_TOKEN_ACCOUNT);
+    let shell_token = env::var(ACCESS_TOKEN_ENV_VAR)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let bundle_result = load_auth_bundle(secret_store);
+    let keychain_token = bundle_result
+        .as_ref()
+        .ok()
+        .and_then(|bundle| bundle.meta.as_ref())
+        .and_then(|meta| meta.access_token.clone());
 
-    match (shell_token, keychain_result) {
-        (Some(shell_token), Ok(keychain_token)) => AccessTokenResolution {
+    match (shell_token, keychain_token, bundle_result.err()) {
+        (Some(shell_token), keychain_token, None) => AccessTokenResolution {
             token: Some(shell_token),
             status: AccessTokenStatus {
                 access_token_present: true,
@@ -233,7 +239,7 @@ fn resolve_access_token(secret_store: &dyn SecretStore) -> AccessTokenResolution
                 credential_store_error: None,
             },
         },
-        (Some(shell_token), Err(error)) => AccessTokenResolution {
+        (Some(shell_token), _, Some(error)) => AccessTokenResolution {
             token: Some(shell_token),
             status: AccessTokenStatus {
                 access_token_present: true,
@@ -243,7 +249,7 @@ fn resolve_access_token(secret_store: &dyn SecretStore) -> AccessTokenResolution
                 credential_store_error: Some(error.to_string()),
             },
         },
-        (None, Ok(Some(keychain_token))) => AccessTokenResolution {
+        (None, Some(keychain_token), None) => AccessTokenResolution {
             token: Some(keychain_token),
             status: AccessTokenStatus {
                 access_token_present: true,
@@ -253,7 +259,7 @@ fn resolve_access_token(secret_store: &dyn SecretStore) -> AccessTokenResolution
                 credential_store_error: None,
             },
         },
-        (None, Ok(None)) => AccessTokenResolution {
+        (None, None, None) => AccessTokenResolution {
             token: None,
             status: AccessTokenStatus {
                 access_token_present: false,
@@ -263,7 +269,7 @@ fn resolve_access_token(secret_store: &dyn SecretStore) -> AccessTokenResolution
                 credential_store_error: None,
             },
         },
-        (None, Err(error)) => AccessTokenResolution {
+        (None, None, Some(error)) => AccessTokenResolution {
             token: None,
             status: AccessTokenStatus {
                 access_token_present: false,
@@ -271,6 +277,16 @@ fn resolve_access_token(secret_store: &dyn SecretStore) -> AccessTokenResolution
                 credential_store_available: error.kind() != SecretStoreErrorKind::Unavailable,
                 keychain_token_present: false,
                 credential_store_error: Some(error.to_string()),
+            },
+        },
+        (None, Some(keychain_token), Some(_)) => AccessTokenResolution {
+            token: Some(keychain_token),
+            status: AccessTokenStatus {
+                access_token_present: true,
+                access_token_source: AccessTokenSource::Keychain,
+                credential_store_available: true,
+                keychain_token_present: true,
+                credential_store_error: None,
             },
         },
     }
@@ -342,7 +358,7 @@ mod tests {
     use super::{inspect_access_token, AccessTokenSource, ConfigOverrides, ResolvedConfig};
     use crate::output::OutputFormat;
     use crate::secret_store::{SecretStore, SecretStoreError, SecretStoreErrorKind};
-    use crate::{inspect, META_ACCESS_TOKEN_ACCOUNT, META_ACCESS_TOKEN_SERVICE};
+    use crate::{inspect, store_auth_bundle, AuthBundle, MetaAuthBundle};
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
@@ -362,13 +378,16 @@ mod tests {
         }
 
         fn put_secret(&self, secret: &str) {
-            self.secrets.lock().unwrap().insert(
-                (
-                    META_ACCESS_TOKEN_SERVICE.to_string(),
-                    META_ACCESS_TOKEN_ACCOUNT.to_string(),
-                ),
-                secret.to_string(),
-            );
+            store_auth_bundle(
+                self,
+                &AuthBundle {
+                    meta: Some(MetaAuthBundle {
+                        access_token: Some(secret.to_string()),
+                    }),
+                    ..AuthBundle::default()
+                },
+            )
+            .unwrap();
         }
 
         fn set_get_error(&self, error: SecretStoreError) {
