@@ -5,3 +5,9 @@
 /npm/platform/*/bin
 /coverage
 .env
+/website/node_modules
+/website/dist
+/website/build
+/website/.react-router
+/website/.vercel
+/website/app/generated
