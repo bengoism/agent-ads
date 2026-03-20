@@ -8,8 +8,8 @@ use agent_ads_core::google_config::{
 use agent_ads_core::output::{OutputEnvelope, OutputMeta};
 use agent_ads_core::secret_store::SecretStore;
 use agent_ads_core::{
-    load_auth_bundle, store_auth_bundle, GoogleAuthBundle, GoogleClient, GoogleError,
-    GoogleResponse, AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
+    mutate_auth_bundle, GoogleAuthBundle, GoogleClient, GoogleError, GoogleResponse,
+    AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
 use clap::{Args, Subcommand};
 use rpassword::prompt_password;
@@ -301,23 +301,21 @@ pub fn handle_auth(
     match command {
         AuthCommand::Set(args) => {
             let inputs = resolve_google_auth_inputs(&args)?;
-            let mut bundle = load_auth_bundle(secret_store).map_err(|error| {
-                google_auth_storage_error("store Google Ads credentials", &error)
-            })?;
-            bundle.google = Some(GoogleAuthBundle {
-                developer_token: Some(inputs.developer_token),
-                client_id: Some(inputs.client_id),
-                client_secret: Some(inputs.client_secret),
-                refresh_token: Some(inputs.refresh_token),
-            });
-            store_auth_bundle(secret_store, &bundle).map_err(|error| {
-                google_auth_storage_error("store Google Ads credentials", &error)
-            })?;
+            let outcome = mutate_auth_bundle(secret_store, move |bundle| {
+                bundle.google = Some(GoogleAuthBundle {
+                    developer_token: Some(inputs.developer_token),
+                    client_id: Some(inputs.client_id),
+                    client_secret: Some(inputs.client_secret),
+                    refresh_token: Some(inputs.refresh_token),
+                });
+            })
+            .map_err(|error| google_auth_storage_error("store Google Ads credentials", &error))?;
 
             Ok(google_command_result(
                 json!({
                     "provider": "google",
                     "stored": true,
+                    "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
                     "credentials_stored": [
                         "developer_token",
                         "client_id",
@@ -335,29 +333,30 @@ pub fn handle_auth(
             0,
         )),
         AuthCommand::Delete => {
-            let mut bundle = load_auth_bundle(secret_store).map_err(|error| {
-                google_auth_storage_error("delete Google Ads credentials", &error)
-            })?;
-            let deleted_google = bundle.google.take();
-            let deleted_developer_token = deleted_google
-                .as_ref()
-                .and_then(|google| google.developer_token.as_ref())
-                .is_some();
-            let deleted_client_id = deleted_google
-                .as_ref()
-                .and_then(|google| google.client_id.as_ref())
-                .is_some();
-            let deleted_client_secret = deleted_google
-                .as_ref()
-                .and_then(|google| google.client_secret.as_ref())
-                .is_some();
-            let deleted_refresh_token = deleted_google
-                .as_ref()
-                .and_then(|google| google.refresh_token.as_ref())
-                .is_some();
-            store_auth_bundle(secret_store, &bundle).map_err(|error| {
-                google_auth_storage_error("delete Google Ads credentials", &error)
-            })?;
+            let mut deleted_developer_token = false;
+            let mut deleted_client_id = false;
+            let mut deleted_client_secret = false;
+            let mut deleted_refresh_token = false;
+            let outcome = mutate_auth_bundle(secret_store, |bundle| {
+                let deleted_google = bundle.google.take();
+                deleted_developer_token = deleted_google
+                    .as_ref()
+                    .and_then(|google| google.developer_token.as_ref())
+                    .is_some();
+                deleted_client_id = deleted_google
+                    .as_ref()
+                    .and_then(|google| google.client_id.as_ref())
+                    .is_some();
+                deleted_client_secret = deleted_google
+                    .as_ref()
+                    .and_then(|google| google.client_secret.as_ref())
+                    .is_some();
+                deleted_refresh_token = deleted_google
+                    .as_ref()
+                    .and_then(|google| google.refresh_token.as_ref())
+                    .is_some();
+            })
+            .map_err(|error| google_auth_storage_error("delete Google Ads credentials", &error))?;
 
             Ok(google_command_result(
                 json!({
@@ -366,6 +365,7 @@ pub fn handle_auth(
                     "client_id_deleted": deleted_client_id,
                     "client_secret_deleted": deleted_client_secret,
                     "refresh_token_deleted": deleted_refresh_token,
+                    "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
                 }),
                 "/google/auth/delete",
                 0,
@@ -874,14 +874,16 @@ fn normalize_numeric_filter(value: &str, label: &str) -> Result<String, GoogleEr
 }
 
 #[derive(Debug)]
-struct GoogleAuthInputs {
-    developer_token: String,
-    client_id: String,
-    client_secret: String,
-    refresh_token: String,
+pub(crate) struct GoogleAuthInputs {
+    pub developer_token: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub refresh_token: String,
 }
 
-fn resolve_google_auth_inputs(args: &AuthSetArgs) -> Result<GoogleAuthInputs, GoogleError> {
+pub(crate) fn resolve_google_auth_inputs(
+    args: &AuthSetArgs,
+) -> Result<GoogleAuthInputs, GoogleError> {
     if args.stdin {
         let input = read_input(Path::new("-")).map_err(GoogleError::from)?;
         return parse_google_auth_inputs_from_stdin(&input);
@@ -1045,7 +1047,10 @@ fn google_auth_status_payload(auth: GoogleAuthSnapshot) -> Value {
     })
 }
 
-fn google_auth_storage_error(action: &str, error: &impl std::fmt::Display) -> GoogleError {
+pub(crate) fn google_auth_storage_error(
+    action: &str,
+    error: &impl std::fmt::Display,
+) -> GoogleError {
     GoogleError::Config(format!(
         "failed to {action} in the OS credential store: {error}{}",
         google_linux_secure_storage_hint()

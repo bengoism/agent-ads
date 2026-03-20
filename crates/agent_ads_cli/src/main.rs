@@ -22,8 +22,10 @@ use agent_ads_core::pinterest_error::{PinterestApiError, PinterestError};
 use agent_ads_core::tiktok_config::TikTokConfigOverrides;
 use agent_ads_core::tiktok_error::{TikTokApiError, TikTokError};
 use agent_ads_core::{
-    google_inspect, load_auth_bundle, pinterest_inspect, tiktok_inspect, AuthBundle, GoogleClient,
-    GoogleResolvedConfig, GraphClient, OsKeyringStore, PinterestClient, PinterestResolvedConfig,
+    google_inspect, load_auth_bundle, lock_auth_bundle, pinterest_inspect,
+    prepare_auth_bundle_for_update, store_auth_bundle, tiktok_inspect, AuthBundle,
+    GoogleAuthBundle, GoogleClient, GoogleResolvedConfig, GraphClient, MetaAuthBundle,
+    OsKeyringStore, PinterestAuthBundle, PinterestClient, PinterestResolvedConfig,
     SecretStoreError, SecretStoreErrorKind, TikTokClient, TikTokResolvedConfig,
     AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
@@ -800,9 +802,22 @@ fn run_interactive_root_auth(
     secret_store: &dyn agent_ads_core::SecretStore,
     output_options: &OutputOptions,
 ) -> ExitCode {
-    let summaries = build_runtime_root_auth_status();
+    let _lock = match lock_auth_bundle() {
+        Ok(lock) => lock,
+        Err(error) => {
+            return exit_with_error(&root_auth_bundle_access_error(&error), output_options);
+        }
+    };
+    let bundle_result = load_auth_bundle_with_timeout();
+    let summaries = build_root_auth_status_from_bundle_result(bundle_result.clone());
     match select_root_auth_provider(flow, &summaries) {
-        Ok(Some(provider)) => run_root_auth_flow(flow, provider, secret_store, output_options),
+        Ok(Some(provider)) => run_root_auth_flow(
+            flow,
+            provider,
+            secret_store,
+            output_options,
+            bundle_result.clone(),
+        ),
         Ok(None) => ExitCode::SUCCESS,
         Err(error) => {
             let mut stderr = io::stderr();
@@ -823,7 +838,7 @@ fn run_interactive_root_auth(
 
             match run_root_auth_numeric_prompt(flow, &summaries) {
                 Ok(Some(provider)) => {
-                    run_root_auth_flow(flow, provider, secret_store, output_options)
+                    run_root_auth_flow(flow, provider, secret_store, output_options, bundle_result)
                 }
                 Ok(None) => ExitCode::SUCCESS,
                 Err(error) => exit_with_error(&MetaAdsError::Io(error), output_options),
@@ -963,10 +978,15 @@ fn run_root_auth_flow(
     provider: RootAuthProvider,
     secret_store: &dyn agent_ads_core::SecretStore,
     output_options: &OutputOptions,
+    bundle_result: Result<AuthBundle, SecretStoreError>,
 ) -> ExitCode {
     match flow {
-        RootAuthFlow::Setup => run_root_auth_setup(provider, secret_store, output_options),
-        RootAuthFlow::Clear => run_root_auth_clear(provider, secret_store, output_options),
+        RootAuthFlow::Setup => {
+            run_root_auth_setup(provider, secret_store, output_options, bundle_result)
+        }
+        RootAuthFlow::Clear => {
+            run_root_auth_clear(provider, secret_store, output_options, bundle_result)
+        }
     }
 }
 
@@ -974,52 +994,179 @@ fn run_root_auth_setup(
     provider: RootAuthProvider,
     secret_store: &dyn agent_ads_core::SecretStore,
     output_options: &OutputOptions,
+    bundle_result: Result<AuthBundle, SecretStoreError>,
 ) -> ExitCode {
+    let (mut bundle, recovered_invalid_bundle) =
+        match prepare_root_auth_bundle_update(bundle_result, output_options) {
+            Some(result) => result,
+            None => return ExitCode::FAILURE,
+        };
+
     match provider {
-        RootAuthProvider::Meta => match meta::handle_auth(
-            meta::AuthCommand::Set(meta::AuthSetArgs { stdin: false }),
-            secret_store,
-        ) {
-            Ok(result) => emit_result(result, output_options, None),
-            Err(error) => exit_with_error(&error, output_options),
-        },
-        RootAuthProvider::Google => match google::handle_auth(
-            google::AuthCommand::Set(google::AuthSetArgs {
+        RootAuthProvider::Meta => {
+            let token = match meta::resolve_auth_token_input(&meta::AuthSetArgs { stdin: false }) {
+                Ok(token) => token,
+                Err(error) => return exit_with_error(&error, output_options),
+            };
+            bundle.meta = Some(MetaAuthBundle {
+                access_token: Some(token),
+            });
+
+            if let Err(error) = persist_root_auth_bundle(provider, secret_store, &bundle) {
+                return exit_with_error(&error, output_options);
+            }
+
+            emit_result(
+                static_command_result(
+                    json!({
+                        "provider": "meta",
+                        "stored": true,
+                        "recovered_invalid_bundle": recovered_invalid_bundle,
+                        "credential_store_service": AUTH_BUNDLE_SERVICE,
+                        "credential_store_account": AUTH_BUNDLE_ACCOUNT,
+                    }),
+                    "/meta/auth/set",
+                    0,
+                ),
+                output_options,
+                None,
+            )
+        }
+        RootAuthProvider::Google => {
+            let inputs = match google::resolve_google_auth_inputs(&google::AuthSetArgs {
                 stdin: false,
                 developer_token: None,
                 client_id: None,
                 client_secret: None,
                 refresh_token: None,
-            }),
-            secret_store,
-        ) {
-            Ok(result) => emit_result(result, output_options, None),
-            Err(error) => exit_with_google_error(&error, output_options),
-        },
-        RootAuthProvider::Tiktok => match tiktok::handle_auth(
-            tiktok::AuthCommand::Set(tiktok::AuthSetArgs {
+            }) {
+                Ok(inputs) => inputs,
+                Err(error) => return exit_with_google_error(&error, output_options),
+            };
+            bundle.google = Some(GoogleAuthBundle {
+                developer_token: Some(inputs.developer_token),
+                client_id: Some(inputs.client_id),
+                client_secret: Some(inputs.client_secret),
+                refresh_token: Some(inputs.refresh_token),
+            });
+
+            if let Err(error) = persist_root_auth_bundle(provider, secret_store, &bundle) {
+                return exit_with_google_error(
+                    &GoogleError::Config(error.to_string()),
+                    output_options,
+                );
+            }
+
+            emit_result(
+                static_command_result(
+                    json!({
+                        "provider": "google",
+                        "stored": true,
+                        "recovered_invalid_bundle": recovered_invalid_bundle,
+                        "credentials_stored": [
+                            "developer_token",
+                            "client_id",
+                            "client_secret",
+                            "refresh_token"
+                        ],
+                    }),
+                    "/google/auth/set",
+                    0,
+                ),
+                output_options,
+                None,
+            )
+        }
+        RootAuthProvider::Tiktok => {
+            let inputs = match tiktok::resolve_tiktok_auth_inputs(&tiktok::AuthSetArgs {
                 stdin: false,
                 refresh_token: false,
                 full: true,
-            }),
-            secret_store,
-        ) {
-            Ok(result) => emit_result(result, output_options, None),
-            Err(error) => exit_with_tiktok_error(&error, output_options),
-        },
-        RootAuthProvider::Pinterest => match pinterest::handle_auth(
-            pinterest::AuthCommand::Set(pinterest::AuthSetArgs {
+            }) {
+                Ok(inputs) => inputs,
+                Err(error) => return exit_with_tiktok_error(&error, output_options),
+            };
+            let credentials_stored = root_tiktok_credentials_stored(&inputs);
+            let mut tiktok_bundle = bundle.tiktok.take().unwrap_or_default();
+            tiktok_bundle.access_token = Some(inputs.access_token);
+            if let Some(app_id) = inputs.app_id {
+                tiktok_bundle.app_id = Some(app_id);
+            }
+            if let Some(app_secret) = inputs.app_secret {
+                tiktok_bundle.app_secret = Some(app_secret);
+            }
+            if let Some(refresh_token) = inputs.refresh_token {
+                tiktok_bundle.refresh_token = Some(refresh_token);
+            }
+            bundle.tiktok = Some(tiktok_bundle);
+
+            if let Err(error) = persist_root_auth_bundle(provider, secret_store, &bundle) {
+                return exit_with_tiktok_error(
+                    &TikTokError::Config(error.to_string()),
+                    output_options,
+                );
+            }
+
+            emit_result(
+                static_command_result(
+                    json!({
+                        "provider": "tiktok",
+                        "stored": true,
+                        "recovered_invalid_bundle": recovered_invalid_bundle,
+                        "credentials_stored": credentials_stored,
+                    }),
+                    "/tiktok/auth/set",
+                    0,
+                ),
+                output_options,
+                None,
+            )
+        }
+        RootAuthProvider::Pinterest => {
+            let inputs = match pinterest::resolve_pinterest_auth_inputs(&pinterest::AuthSetArgs {
                 stdin: false,
                 app_id: None,
                 app_secret: None,
                 access_token: None,
                 refresh_token: None,
-            }),
-            secret_store,
-        ) {
-            Ok(result) => emit_result(result, output_options, None),
-            Err(error) => exit_with_pinterest_error(&error, output_options),
-        },
+            }) {
+                Ok(inputs) => inputs,
+                Err(error) => return exit_with_pinterest_error(&error, output_options),
+            };
+            bundle.pinterest = Some(PinterestAuthBundle {
+                app_id: Some(inputs.app_id),
+                app_secret: Some(inputs.app_secret),
+                access_token: Some(inputs.access_token),
+                refresh_token: Some(inputs.refresh_token),
+            });
+
+            if let Err(error) = persist_root_auth_bundle(provider, secret_store, &bundle) {
+                return exit_with_pinterest_error(
+                    &PinterestError::Config(error.to_string()),
+                    output_options,
+                );
+            }
+
+            emit_result(
+                static_command_result(
+                    json!({
+                        "provider": "pinterest",
+                        "stored": true,
+                        "recovered_invalid_bundle": recovered_invalid_bundle,
+                        "credentials_stored": [
+                            "app_id",
+                            "app_secret",
+                            "access_token",
+                            "refresh_token"
+                        ],
+                    }),
+                    "/pinterest/auth/set",
+                    0,
+                ),
+                output_options,
+                None,
+            )
+        }
     }
 }
 
@@ -1027,6 +1174,7 @@ fn run_root_auth_clear(
     provider: RootAuthProvider,
     secret_store: &dyn agent_ads_core::SecretStore,
     output_options: &OutputOptions,
+    bundle_result: Result<AuthBundle, SecretStoreError>,
 ) -> ExitCode {
     let mut stderr = io::stderr();
     if writeln!(
@@ -1045,8 +1193,20 @@ fn run_root_auth_clear(
         );
     }
 
+    let (mut bundle, recovered_invalid_bundle) =
+        match prepare_root_auth_bundle_update(bundle_result, output_options) {
+            Some(result) => result,
+            None => return ExitCode::FAILURE,
+        };
+
     match select_root_auth_clear_confirmation(provider) {
-        Ok(Some(true)) => run_root_auth_delete_provider(provider, secret_store, output_options),
+        Ok(Some(true)) => run_root_auth_clear_with_bundle(
+            provider,
+            secret_store,
+            output_options,
+            &mut bundle,
+            recovered_invalid_bundle,
+        ),
         Ok(Some(false) | None) => ExitCode::SUCCESS,
         Err(error) => {
             if writeln!(
@@ -1065,14 +1225,110 @@ fn run_root_auth_clear(
             }
 
             match run_root_auth_clear_confirmation_prompt(provider) {
-                Ok(Some(true)) => {
-                    run_root_auth_delete_provider(provider, secret_store, output_options)
-                }
+                Ok(Some(true)) => run_root_auth_clear_with_bundle(
+                    provider,
+                    secret_store,
+                    output_options,
+                    &mut bundle,
+                    recovered_invalid_bundle,
+                ),
                 Ok(Some(false) | None) => ExitCode::SUCCESS,
                 Err(error) => exit_with_error(&MetaAdsError::Io(error), output_options),
             }
         }
     }
+}
+
+fn run_root_auth_clear_with_bundle(
+    provider: RootAuthProvider,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    output_options: &OutputOptions,
+    bundle: &mut AuthBundle,
+    recovered_invalid_bundle: bool,
+) -> ExitCode {
+    let result = match provider {
+        RootAuthProvider::Meta => {
+            let deleted = bundle
+                .meta
+                .take()
+                .and_then(|meta| meta.access_token)
+                .is_some();
+            static_command_result(
+                json!({
+                    "provider": "meta",
+                    "deleted": deleted,
+                    "recovered_invalid_bundle": recovered_invalid_bundle,
+                    "credential_store_service": AUTH_BUNDLE_SERVICE,
+                    "credential_store_account": AUTH_BUNDLE_ACCOUNT,
+                }),
+                "/meta/auth/delete",
+                0,
+            )
+        }
+        RootAuthProvider::Google => {
+            let deleted_google = bundle.google.take();
+            static_command_result(
+                json!({
+                    "provider": "google",
+                    "developer_token_deleted": deleted_google.as_ref().and_then(|google| google.developer_token.as_ref()).is_some(),
+                    "client_id_deleted": deleted_google.as_ref().and_then(|google| google.client_id.as_ref()).is_some(),
+                    "client_secret_deleted": deleted_google.as_ref().and_then(|google| google.client_secret.as_ref()).is_some(),
+                    "refresh_token_deleted": deleted_google.as_ref().and_then(|google| google.refresh_token.as_ref()).is_some(),
+                    "recovered_invalid_bundle": recovered_invalid_bundle,
+                }),
+                "/google/auth/delete",
+                0,
+            )
+        }
+        RootAuthProvider::Tiktok => {
+            let deleted_tiktok = bundle.tiktok.take();
+            static_command_result(
+                json!({
+                    "provider": "tiktok",
+                    "app_id_deleted": deleted_tiktok.as_ref().and_then(|tiktok| tiktok.app_id.as_ref()).is_some(),
+                    "app_secret_deleted": deleted_tiktok.as_ref().and_then(|tiktok| tiktok.app_secret.as_ref()).is_some(),
+                    "access_token_deleted": deleted_tiktok.as_ref().and_then(|tiktok| tiktok.access_token.as_ref()).is_some(),
+                    "refresh_token_deleted": deleted_tiktok.as_ref().and_then(|tiktok| tiktok.refresh_token.as_ref()).is_some(),
+                    "recovered_invalid_bundle": recovered_invalid_bundle,
+                }),
+                "/tiktok/auth/delete",
+                0,
+            )
+        }
+        RootAuthProvider::Pinterest => {
+            let deleted_pinterest = bundle.pinterest.take();
+            static_command_result(
+                json!({
+                    "provider": "pinterest",
+                    "app_id_deleted": deleted_pinterest.as_ref().and_then(|pinterest| pinterest.app_id.as_ref()).is_some(),
+                    "app_secret_deleted": deleted_pinterest.as_ref().and_then(|pinterest| pinterest.app_secret.as_ref()).is_some(),
+                    "access_token_deleted": deleted_pinterest.as_ref().and_then(|pinterest| pinterest.access_token.as_ref()).is_some(),
+                    "refresh_token_deleted": deleted_pinterest.as_ref().and_then(|pinterest| pinterest.refresh_token.as_ref()).is_some(),
+                    "recovered_invalid_bundle": recovered_invalid_bundle,
+                }),
+                "/pinterest/auth/delete",
+                0,
+            )
+        }
+    };
+
+    if let Err(error) = persist_root_auth_bundle(provider, secret_store, bundle) {
+        return match provider {
+            RootAuthProvider::Meta => exit_with_error(&error, output_options),
+            RootAuthProvider::Google => {
+                exit_with_google_error(&GoogleError::Config(error.to_string()), output_options)
+            }
+            RootAuthProvider::Tiktok => {
+                exit_with_tiktok_error(&TikTokError::Config(error.to_string()), output_options)
+            }
+            RootAuthProvider::Pinterest => exit_with_pinterest_error(
+                &PinterestError::Config(error.to_string()),
+                output_options,
+            ),
+        };
+    }
+
+    emit_result(result, output_options, None)
 }
 
 fn select_root_auth_clear_confirmation(
@@ -1124,6 +1380,60 @@ fn root_auth_clear_menu_items(provider: RootAuthProvider) -> Vec<String> {
     ]
 }
 
+fn prepare_root_auth_bundle_update(
+    bundle_result: Result<AuthBundle, SecretStoreError>,
+    output_options: &OutputOptions,
+) -> Option<(AuthBundle, bool)> {
+    match prepare_auth_bundle_for_update(bundle_result) {
+        Ok((bundle, outcome)) => Some((bundle, outcome.recovered_invalid_bundle)),
+        Err(error) => {
+            let _ = exit_with_error(&root_auth_bundle_access_error(&error), output_options);
+            None
+        }
+    }
+}
+
+fn persist_root_auth_bundle(
+    provider: RootAuthProvider,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    bundle: &AuthBundle,
+) -> Result<(), MetaAdsError> {
+    store_auth_bundle(secret_store, bundle).map_err(|error| match provider {
+        RootAuthProvider::Meta => meta::auth_storage_error("store", &error),
+        RootAuthProvider::Google => MetaAdsError::Config(
+            google::google_auth_storage_error("store Google Ads credentials", &error).to_string(),
+        ),
+        RootAuthProvider::Tiktok => MetaAdsError::Config(
+            tiktok::tiktok_auth_storage_error("store TikTok credentials", &error).to_string(),
+        ),
+        RootAuthProvider::Pinterest => MetaAdsError::Config(
+            pinterest::pinterest_auth_storage_error("store Pinterest credentials", &error)
+                .to_string(),
+        ),
+    })
+}
+
+fn root_auth_bundle_access_error(error: &SecretStoreError) -> MetaAdsError {
+    MetaAdsError::Config(format!(
+        "failed to read the auth bundle from the OS credential store: {error}"
+    ))
+}
+
+fn root_tiktok_credentials_stored(inputs: &tiktok::TikTokAuthInputs) -> Vec<&'static str> {
+    let mut credentials_stored = vec!["access_token"];
+    if inputs.app_id.is_some() {
+        credentials_stored.push("app_id");
+    }
+    if inputs.app_secret.is_some() {
+        credentials_stored.push("app_secret");
+    }
+    if inputs.refresh_token.is_some() {
+        credentials_stored.push("refresh_token");
+    }
+    credentials_stored
+}
+
+#[cfg(test)]
 fn run_root_auth_delete_provider(
     provider: RootAuthProvider,
     secret_store: &dyn agent_ads_core::SecretStore,
@@ -1718,8 +2028,9 @@ mod tests {
     use super::{
         build_root_auth_status, parse_root_auth_confirmation, parse_root_auth_selection,
         resolve_google_output_format, resolve_pinterest_output_format, root_auth_clear_menu_items,
-        root_auth_menu_items, run_root_auth_delete_provider, should_run_interactive_root_auth,
-        validate_root_auth_clear_mode, Cli, OutputOptions, RootAuthProvider, RootAuthState,
+        root_auth_menu_items, run_root_auth_clear_with_bundle, run_root_auth_delete_provider,
+        should_run_interactive_root_auth, validate_root_auth_clear_mode, Cli, OutputOptions,
+        RootAuthProvider, RootAuthState,
     };
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -1734,6 +2045,10 @@ mod tests {
     impl FakeSecretStore {
         fn get_call_count(&self) -> usize {
             *self.get_calls.lock().unwrap()
+        }
+
+        fn reset_get_call_count(&self) {
+            *self.get_calls.lock().unwrap() = 0;
         }
     }
 
@@ -1903,6 +2218,21 @@ mod tests {
 
     #[test]
     fn root_auth_menu_items_include_status_details() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var("META_ADS_ACCESS_TOKEN");
+        env::remove_var("GOOGLE_ADS_DEVELOPER_TOKEN");
+        env::remove_var("GOOGLE_ADS_CLIENT_ID");
+        env::remove_var("GOOGLE_ADS_CLIENT_SECRET");
+        env::remove_var("GOOGLE_ADS_REFRESH_TOKEN");
+        env::remove_var("TIKTOK_ADS_APP_ID");
+        env::remove_var("TIKTOK_ADS_APP_SECRET");
+        env::remove_var("TIKTOK_ADS_ACCESS_TOKEN");
+        env::remove_var("TIKTOK_ADS_REFRESH_TOKEN");
+        env::remove_var("PINTEREST_ADS_APP_ID");
+        env::remove_var("PINTEREST_ADS_APP_SECRET");
+        env::remove_var("PINTEREST_ADS_ACCESS_TOKEN");
+        env::remove_var("PINTEREST_ADS_REFRESH_TOKEN");
+
         let store = FakeSecretStore::default();
         let summaries = build_root_auth_status(&store);
         let items = root_auth_menu_items(&summaries);
@@ -1941,6 +2271,43 @@ mod tests {
 
         assert_eq!(summaries.len(), 4);
         assert_eq!(store.get_call_count(), 1);
+    }
+
+    #[test]
+    fn root_auth_clear_with_bundle_does_not_reread_store() {
+        let store = FakeSecretStore::default();
+        store_auth_bundle(
+            &store,
+            &AuthBundle {
+                google: Some(GoogleAuthBundle {
+                    developer_token: Some("developer-token".to_string()),
+                    client_id: Some("client-id".to_string()),
+                    client_secret: Some("client-secret".to_string()),
+                    refresh_token: Some("refresh-token".to_string()),
+                }),
+                ..AuthBundle::default()
+            },
+        )
+        .unwrap();
+        let mut bundle = load_auth_bundle(&store).unwrap();
+        store.reset_get_call_count();
+
+        let exit_code = run_root_auth_clear_with_bundle(
+            RootAuthProvider::Google,
+            &store,
+            &OutputOptions {
+                format: OutputFormat::Json,
+                pretty: false,
+                envelope: false,
+                include_meta: false,
+                quiet: false,
+            },
+            &mut bundle,
+            false,
+        );
+
+        assert_eq!(exit_code, std::process::ExitCode::SUCCESS);
+        assert_eq!(store.get_call_count(), 0);
     }
 
     #[test]

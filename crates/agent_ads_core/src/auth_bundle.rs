@@ -1,3 +1,9 @@
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
+use std::thread;
+use std::time::{Duration, SystemTime};
+
 use serde::{Deserialize, Serialize};
 
 use crate::secret_store::{
@@ -5,6 +11,29 @@ use crate::secret_store::{
 };
 
 pub const AUTH_BUNDLE_VERSION: u8 = 1;
+const AUTH_BUNDLE_LOCK_FILE: &str = "agent-ads-auth-bundle-v1.lock";
+const AUTH_BUNDLE_LOCK_TIMEOUT: Duration = Duration::from_secs(10);
+const AUTH_BUNDLE_STALE_LOCK_AGE: Duration = Duration::from_secs(60 * 60 * 4);
+const AUTH_BUNDLE_DESERIALIZE_ERROR_PREFIX: &str = "failed to deserialize stored auth bundle:";
+const AUTH_BUNDLE_UNSUPPORTED_VERSION_PREFIX: &str = "unsupported stored auth bundle version ";
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AuthBundleMutationOutcome {
+    pub recovered_invalid_bundle: bool,
+}
+
+#[derive(Debug)]
+pub struct AuthBundleLockGuard {
+    path: PathBuf,
+    #[allow(dead_code)]
+    file: File,
+}
+
+impl Drop for AuthBundleLockGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AuthBundle {
@@ -152,9 +181,47 @@ impl PinterestAuthBundle {
 
 pub fn load_auth_bundle(secret_store: &dyn SecretStore) -> Result<AuthBundle, SecretStoreError> {
     match secret_store.get_secret(AUTH_BUNDLE_SERVICE, AUTH_BUNDLE_ACCOUNT) {
-        Ok(Some(raw_bundle)) => deserialize_auth_bundle(&raw_bundle),
+        Ok(Some(raw_bundle)) => {
+            deserialize_auth_bundle(&raw_bundle).map_err(map_auth_bundle_decode_error)
+        }
         Ok(None) => Ok(AuthBundle::default()),
         Err(error) => Err(error),
+    }
+}
+
+pub fn lock_auth_bundle() -> Result<AuthBundleLockGuard, SecretStoreError> {
+    let path = std::env::temp_dir().join(AUTH_BUNDLE_LOCK_FILE);
+    let started_at = SystemTime::now();
+
+    loop {
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                let _ = writeln!(file, "pid={}", std::process::id());
+                return Ok(AuthBundleLockGuard { path, file });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                clear_stale_auth_bundle_lock(&path)?;
+
+                let elapsed = started_at.elapsed().unwrap_or_default();
+                if elapsed >= AUTH_BUNDLE_LOCK_TIMEOUT {
+                    return Err(SecretStoreError::new(
+                        SecretStoreErrorKind::Failure,
+                        format!(
+                            "timed out waiting for the auth bundle lock at {}",
+                            path.display()
+                        ),
+                    ));
+                }
+
+                thread::sleep(Duration::from_millis(50));
+            }
+            Err(error) => {
+                return Err(SecretStoreError::new(
+                    SecretStoreErrorKind::Failure,
+                    format!("failed to acquire the auth bundle lock: {error}"),
+                ));
+            }
+        }
     }
 }
 
@@ -181,27 +248,110 @@ pub fn store_auth_bundle(
     }
 }
 
+pub fn prepare_auth_bundle_for_update(
+    bundle_result: Result<AuthBundle, SecretStoreError>,
+) -> Result<(AuthBundle, AuthBundleMutationOutcome), SecretStoreError> {
+    match bundle_result {
+        Ok(bundle) => Ok((bundle, AuthBundleMutationOutcome::default())),
+        Err(error) if auth_bundle_error_is_recoverable(&error) => Ok((
+            AuthBundle::default(),
+            AuthBundleMutationOutcome {
+                recovered_invalid_bundle: true,
+            },
+        )),
+        Err(error) => Err(error),
+    }
+}
+
+pub fn mutate_auth_bundle<F>(
+    secret_store: &dyn SecretStore,
+    mutator: F,
+) -> Result<AuthBundleMutationOutcome, SecretStoreError>
+where
+    F: FnOnce(&mut AuthBundle),
+{
+    let _lock = lock_auth_bundle()?;
+    let (mut bundle, outcome) = prepare_auth_bundle_for_update(load_auth_bundle(secret_store))?;
+    mutator(&mut bundle);
+    store_auth_bundle(secret_store, &bundle)?;
+    Ok(outcome)
+}
+
+pub fn auth_bundle_error_is_recoverable(error: &SecretStoreError) -> bool {
+    let message = error.to_string();
+    message.starts_with(AUTH_BUNDLE_DESERIALIZE_ERROR_PREFIX)
+        || message.starts_with(AUTH_BUNDLE_UNSUPPORTED_VERSION_PREFIX)
+}
+
 fn auth_bundle_version() -> u8 {
     AUTH_BUNDLE_VERSION
 }
 
-fn deserialize_auth_bundle(raw_bundle: &str) -> Result<AuthBundle, SecretStoreError> {
-    let mut bundle: AuthBundle = serde_json::from_str(raw_bundle).map_err(|error| {
-        SecretStoreError::new(
-            SecretStoreErrorKind::Failure,
-            format!("failed to deserialize stored auth bundle: {error}"),
-        )
-    })?;
+fn deserialize_auth_bundle(raw_bundle: &str) -> Result<AuthBundle, AuthBundleDecodeError> {
+    let mut bundle: AuthBundle =
+        serde_json::from_str(raw_bundle).map_err(AuthBundleDecodeError::Deserialize)?;
 
     if bundle.version != AUTH_BUNDLE_VERSION {
-        return Err(SecretStoreError::new(
-            SecretStoreErrorKind::Failure,
-            format!("unsupported stored auth bundle version {}", bundle.version),
-        ));
+        return Err(AuthBundleDecodeError::UnsupportedVersion(bundle.version));
     }
 
     bundle.normalize();
     Ok(bundle)
+}
+
+fn map_auth_bundle_decode_error(error: AuthBundleDecodeError) -> SecretStoreError {
+    match error {
+        AuthBundleDecodeError::Deserialize(error) => SecretStoreError::new(
+            SecretStoreErrorKind::Failure,
+            format!("{AUTH_BUNDLE_DESERIALIZE_ERROR_PREFIX} {error}"),
+        ),
+        AuthBundleDecodeError::UnsupportedVersion(version) => SecretStoreError::new(
+            SecretStoreErrorKind::Failure,
+            format!("{AUTH_BUNDLE_UNSUPPORTED_VERSION_PREFIX}{version}"),
+        ),
+    }
+}
+
+fn clear_stale_auth_bundle_lock(path: &PathBuf) -> Result<(), SecretStoreError> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(SecretStoreError::new(
+                SecretStoreErrorKind::Failure,
+                format!(
+                    "failed to inspect the auth bundle lock at {}: {error}",
+                    path.display()
+                ),
+            ));
+        }
+    };
+
+    let modified_at = match metadata.modified() {
+        Ok(modified_at) => modified_at,
+        Err(_) => return Ok(()),
+    };
+
+    let age = match modified_at.elapsed() {
+        Ok(age) => age,
+        Err(_) => return Ok(()),
+    };
+
+    if age < AUTH_BUNDLE_STALE_LOCK_AGE {
+        return Ok(());
+    }
+
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(SecretStoreError::new(
+            SecretStoreErrorKind::Failure,
+            format!(
+                "failed to remove the stale auth bundle lock at {}: {error}",
+                path.display()
+            ),
+        )),
+    }
 }
 
 fn normalize_secret(value: &mut Option<String>) {
@@ -230,6 +380,11 @@ where
 trait BundleSection {
     fn normalize(&mut self);
     fn is_empty(&self) -> bool;
+}
+
+enum AuthBundleDecodeError {
+    Deserialize(serde_json::Error),
+    UnsupportedVersion(u8),
 }
 
 impl BundleSection for MetaAuthBundle {
@@ -275,11 +430,13 @@ impl BundleSection for PinterestAuthBundle {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::Duration;
 
     use super::{
-        load_auth_bundle, store_auth_bundle, AuthBundle, GoogleAuthBundle, MetaAuthBundle,
-        PinterestAuthBundle, TikTokAuthBundle, AUTH_BUNDLE_VERSION,
+        load_auth_bundle, mutate_auth_bundle, store_auth_bundle, AuthBundle, GoogleAuthBundle,
+        MetaAuthBundle, PinterestAuthBundle, TikTokAuthBundle, AUTH_BUNDLE_VERSION,
     };
     use crate::secret_store::{
         SecretStore, SecretStoreError, SecretStoreErrorKind, AUTH_BUNDLE_ACCOUNT,
@@ -422,5 +579,73 @@ mod tests {
         let bundle = load_auth_bundle(&store).unwrap();
 
         assert_eq!(bundle, AuthBundle::default());
+    }
+
+    #[test]
+    fn mutate_auth_bundle_recovers_from_invalid_payload() {
+        let store = FakeSecretStore::default();
+        store
+            .set_secret(AUTH_BUNDLE_SERVICE, AUTH_BUNDLE_ACCOUNT, "{not-json}")
+            .unwrap();
+
+        let outcome = mutate_auth_bundle(&store, |bundle| {
+            bundle.meta = Some(MetaAuthBundle {
+                access_token: Some("meta-token".to_string()),
+            });
+        })
+        .unwrap();
+
+        assert!(outcome.recovered_invalid_bundle);
+        assert_eq!(
+            load_auth_bundle(&store)
+                .unwrap()
+                .meta
+                .unwrap()
+                .access_token
+                .as_deref(),
+            Some("meta-token")
+        );
+    }
+
+    #[test]
+    fn mutate_auth_bundle_serializes_concurrent_updates() {
+        let store = Arc::new(FakeSecretStore::default());
+
+        let meta_store = Arc::clone(&store);
+        let meta_thread = thread::spawn(move || {
+            mutate_auth_bundle(&*meta_store, |bundle| {
+                thread::sleep(Duration::from_millis(150));
+                bundle.meta = Some(MetaAuthBundle {
+                    access_token: Some("meta-token".to_string()),
+                });
+            })
+            .unwrap();
+        });
+
+        thread::sleep(Duration::from_millis(25));
+
+        let google_store = Arc::clone(&store);
+        let google_thread = thread::spawn(move || {
+            mutate_auth_bundle(&*google_store, |bundle| {
+                bundle.google = Some(GoogleAuthBundle {
+                    developer_token: Some("dev-token".to_string()),
+                    ..GoogleAuthBundle::default()
+                });
+            })
+            .unwrap();
+        });
+
+        meta_thread.join().unwrap();
+        google_thread.join().unwrap();
+
+        let bundle = load_auth_bundle(&*store).unwrap();
+        assert_eq!(
+            bundle.meta.unwrap().access_token.as_deref(),
+            Some("meta-token")
+        );
+        assert_eq!(
+            bundle.google.unwrap().developer_token.as_deref(),
+            Some("dev-token")
+        );
     }
 }

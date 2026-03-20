@@ -23,8 +23,10 @@ pub mod tiktok_endpoints;
 pub mod tiktok_error;
 
 pub use auth_bundle::{
-    load_auth_bundle, store_auth_bundle, AuthBundle, GoogleAuthBundle, MetaAuthBundle,
-    PinterestAuthBundle, TikTokAuthBundle, AUTH_BUNDLE_VERSION,
+    auth_bundle_error_is_recoverable, load_auth_bundle, lock_auth_bundle, mutate_auth_bundle,
+    prepare_auth_bundle_for_update, store_auth_bundle, AuthBundle, AuthBundleLockGuard,
+    AuthBundleMutationOutcome, GoogleAuthBundle, MetaAuthBundle, PinterestAuthBundle,
+    TikTokAuthBundle, AUTH_BUNDLE_VERSION,
 };
 pub use client::{GraphClient, GraphResponse, Paging, PagingCursors};
 pub use config::{

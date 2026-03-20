@@ -14,7 +14,7 @@ use agent_ads_core::pinterest_endpoints::{
 };
 use agent_ads_core::secret_store::SecretStore;
 use agent_ads_core::{
-    load_auth_bundle, pinterest_refresh_access_token, store_auth_bundle, PinterestAuthBundle,
+    load_auth_bundle, mutate_auth_bundle, pinterest_refresh_access_token, PinterestAuthBundle,
     PinterestClient, PinterestError, PinterestRefreshResult, PinterestResponse,
     AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
@@ -560,23 +560,21 @@ pub fn handle_auth(
     match command {
         AuthCommand::Set(args) => {
             let inputs = resolve_pinterest_auth_inputs(&args)?;
-            let mut bundle = load_auth_bundle(secret_store).map_err(|error| {
-                pinterest_auth_storage_error("store Pinterest credentials", &error)
-            })?;
-            bundle.pinterest = Some(PinterestAuthBundle {
-                app_id: Some(inputs.app_id),
-                app_secret: Some(inputs.app_secret),
-                access_token: Some(inputs.access_token),
-                refresh_token: Some(inputs.refresh_token),
-            });
-            store_auth_bundle(secret_store, &bundle).map_err(|error| {
-                pinterest_auth_storage_error("store Pinterest credentials", &error)
-            })?;
+            let outcome = mutate_auth_bundle(secret_store, move |bundle| {
+                bundle.pinterest = Some(PinterestAuthBundle {
+                    app_id: Some(inputs.app_id),
+                    app_secret: Some(inputs.app_secret),
+                    access_token: Some(inputs.access_token),
+                    refresh_token: Some(inputs.refresh_token),
+                });
+            })
+            .map_err(|error| pinterest_auth_storage_error("store Pinterest credentials", &error))?;
 
             Ok(pinterest_command_result(
                 json!({
                     "provider": "pinterest",
                     "stored": true,
+                    "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
                     "credentials_stored": [
                         "app_id",
                         "app_secret",
@@ -594,27 +592,30 @@ pub fn handle_auth(
             0,
         )),
         AuthCommand::Delete => {
-            let mut bundle = load_auth_bundle(secret_store).map_err(|error| {
-                pinterest_auth_storage_error("delete Pinterest credentials", &error)
-            })?;
-            let deleted_pinterest = bundle.pinterest.take();
-            let deleted_app_id = deleted_pinterest
-                .as_ref()
-                .and_then(|pinterest| pinterest.app_id.as_ref())
-                .is_some();
-            let deleted_app_secret = deleted_pinterest
-                .as_ref()
-                .and_then(|pinterest| pinterest.app_secret.as_ref())
-                .is_some();
-            let deleted_access_token = deleted_pinterest
-                .as_ref()
-                .and_then(|pinterest| pinterest.access_token.as_ref())
-                .is_some();
-            let deleted_refresh_token = deleted_pinterest
-                .as_ref()
-                .and_then(|pinterest| pinterest.refresh_token.as_ref())
-                .is_some();
-            store_auth_bundle(secret_store, &bundle).map_err(|error| {
+            let mut deleted_app_id = false;
+            let mut deleted_app_secret = false;
+            let mut deleted_access_token = false;
+            let mut deleted_refresh_token = false;
+            let outcome = mutate_auth_bundle(secret_store, |bundle| {
+                let deleted_pinterest = bundle.pinterest.take();
+                deleted_app_id = deleted_pinterest
+                    .as_ref()
+                    .and_then(|pinterest| pinterest.app_id.as_ref())
+                    .is_some();
+                deleted_app_secret = deleted_pinterest
+                    .as_ref()
+                    .and_then(|pinterest| pinterest.app_secret.as_ref())
+                    .is_some();
+                deleted_access_token = deleted_pinterest
+                    .as_ref()
+                    .and_then(|pinterest| pinterest.access_token.as_ref())
+                    .is_some();
+                deleted_refresh_token = deleted_pinterest
+                    .as_ref()
+                    .and_then(|pinterest| pinterest.refresh_token.as_ref())
+                    .is_some();
+            })
+            .map_err(|error| {
                 pinterest_auth_storage_error("delete Pinterest credentials", &error)
             })?;
 
@@ -625,6 +626,7 @@ pub fn handle_auth(
                     "app_secret_deleted": deleted_app_secret,
                     "access_token_deleted": deleted_access_token,
                     "refresh_token_deleted": deleted_refresh_token,
+                    "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
                 }),
                 "/pinterest/auth/delete",
                 0,
@@ -638,7 +640,7 @@ pub async fn handle_auth_refresh(
     secret_store: &dyn SecretStore,
     snapshot: &PinterestConfigSnapshot,
 ) -> Result<CommandResult, PinterestError> {
-    let refresh = refresh_pinterest_tokens(secret_store, snapshot).await?;
+    let (refresh, outcome) = refresh_pinterest_tokens(secret_store, snapshot).await?;
 
     Ok(command_result(
         json!({
@@ -650,6 +652,7 @@ pub async fn handle_auth_refresh(
             "refresh_token_expires_in": refresh.refresh_token_expires_in,
             "refresh_token_expires_at": refresh.refresh_token_expires_at,
             "new_refresh_token_stored": refresh.refresh_token.is_some(),
+            "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
         }),
         "/pinterest/auth/refresh",
         0,
@@ -709,7 +712,7 @@ pub async fn handle_doctor(
                         &snapshot.api_base_url,
                         &snapshot.api_version,
                         snapshot.timeout_seconds,
-                        &refresh.access_token,
+                        &refresh.0.access_token,
                     ) {
                         Ok(client) => match accounts::list_ad_accounts(
                             &client,
@@ -1321,7 +1324,13 @@ async fn wait_for_report(
 async fn refresh_pinterest_tokens(
     secret_store: &dyn SecretStore,
     snapshot: &PinterestConfigSnapshot,
-) -> Result<PinterestRefreshResult, PinterestError> {
+) -> Result<
+    (
+        PinterestRefreshResult,
+        agent_ads_core::AuthBundleMutationOutcome,
+    ),
+    PinterestError,
+> {
     let auth = resolve_pinterest_refresh_auth(secret_store)?;
     let refresh = pinterest_refresh_access_token(
         snapshot.timeout_seconds,
@@ -1331,28 +1340,26 @@ async fn refresh_pinterest_tokens(
     )
     .await?;
 
-    persist_pinterest_refresh(secret_store, &refresh)?;
+    let outcome = persist_pinterest_refresh(secret_store, &refresh)?;
 
-    Ok(refresh)
+    Ok((refresh, outcome))
 }
 
 fn persist_pinterest_refresh(
     secret_store: &dyn SecretStore,
     refresh: &PinterestRefreshResult,
-) -> Result<(), PinterestError> {
-    let mut bundle = load_auth_bundle(secret_store)
-        .map_err(|error| pinterest_auth_storage_error("store refreshed access token", &error))?;
-    let mut pinterest_bundle = bundle.pinterest.take().unwrap_or_default();
-    pinterest_bundle.access_token = Some(refresh.access_token.clone());
-
-    if let Some(new_refresh_token) = &refresh.refresh_token {
-        pinterest_bundle.refresh_token = Some(new_refresh_token.clone());
-    }
-    bundle.pinterest = Some(pinterest_bundle);
-    store_auth_bundle(secret_store, &bundle)
-        .map_err(|error| pinterest_auth_storage_error("store refreshed access token", &error))?;
-
-    Ok(())
+) -> Result<agent_ads_core::AuthBundleMutationOutcome, PinterestError> {
+    let access_token = refresh.access_token.clone();
+    let refresh_token = refresh.refresh_token.clone();
+    mutate_auth_bundle(secret_store, move |bundle| {
+        let mut pinterest_bundle = bundle.pinterest.take().unwrap_or_default();
+        pinterest_bundle.access_token = Some(access_token);
+        if let Some(new_refresh_token) = refresh_token {
+            pinterest_bundle.refresh_token = Some(new_refresh_token);
+        }
+        bundle.pinterest = Some(pinterest_bundle);
+    })
+    .map_err(|error| pinterest_auth_storage_error("store refreshed access token", &error))
 }
 
 fn resolve_report_request(args: &ReportSubmitArgs) -> Result<Value, PinterestError> {
@@ -1465,11 +1472,11 @@ fn extract_report_token(value: &Value) -> Option<String> {
     .map(str::to_string)
 }
 
-struct PinterestAuthInputs {
-    app_id: String,
-    app_secret: String,
-    access_token: String,
-    refresh_token: String,
+pub(crate) struct PinterestAuthInputs {
+    pub app_id: String,
+    pub app_secret: String,
+    pub access_token: String,
+    pub refresh_token: String,
 }
 
 struct PinterestRefreshAuth {
@@ -1478,7 +1485,7 @@ struct PinterestRefreshAuth {
     refresh_token: String,
 }
 
-fn resolve_pinterest_auth_inputs(
+pub(crate) fn resolve_pinterest_auth_inputs(
     args: &AuthSetArgs,
 ) -> Result<PinterestAuthInputs, PinterestError> {
     if args.stdin {
@@ -1703,7 +1710,10 @@ fn pinterest_auth_status_payload(auth: PinterestAuthSnapshot) -> Value {
     })
 }
 
-fn pinterest_auth_storage_error(action: &str, error: &impl std::fmt::Display) -> PinterestError {
+pub(crate) fn pinterest_auth_storage_error(
+    action: &str,
+    error: &impl std::fmt::Display,
+) -> PinterestError {
     PinterestError::Config(format!(
         "failed to {action} in the OS credential store: {error}{}",
         pinterest_linux_secure_storage_hint()

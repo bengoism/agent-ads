@@ -10,8 +10,8 @@ use agent_ads_core::endpoints::{accounts, changes, creative, objects, reports, t
 use agent_ads_core::error::MetaAdsError;
 use agent_ads_core::output::{OutputEnvelope, OutputMeta};
 use agent_ads_core::{
-    load_auth_bundle, store_auth_bundle, GraphClient, MetaAuthBundle, SecretStore,
-    AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
+    mutate_auth_bundle, GraphClient, MetaAuthBundle, SecretStore, AUTH_BUNDLE_ACCOUNT,
+    AUTH_BUNDLE_SERVICE,
 };
 use clap::{Args, Subcommand, ValueEnum};
 use rpassword::prompt_password;
@@ -496,18 +496,18 @@ pub fn handle_auth(
     match command {
         AuthCommand::Set(args) => {
             let token = resolve_auth_token_input(&args)?;
-            let mut bundle = load_auth_bundle(secret_store)
-                .map_err(|error| auth_storage_error("store", &error))?;
-            bundle.meta = Some(MetaAuthBundle {
-                access_token: Some(token),
-            });
-            store_auth_bundle(secret_store, &bundle)
-                .map_err(|error| auth_storage_error("store", &error))?;
+            let outcome = mutate_auth_bundle(secret_store, move |bundle| {
+                bundle.meta = Some(MetaAuthBundle {
+                    access_token: Some(token),
+                });
+            })
+            .map_err(|error| auth_storage_error("store", &error))?;
 
             Ok(meta_command_result(
                 json!({
                     "provider": "meta",
                     "stored": true,
+                    "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
                     "credential_store_service": AUTH_BUNDLE_SERVICE,
                     "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 }),
@@ -521,20 +521,21 @@ pub fn handle_auth(
             0,
         )),
         AuthCommand::Delete => {
-            let mut bundle = load_auth_bundle(secret_store)
-                .map_err(|error| auth_storage_error("delete", &error))?;
-            let deleted = bundle
-                .meta
-                .take()
-                .and_then(|meta| meta.access_token)
-                .is_some();
-            store_auth_bundle(secret_store, &bundle)
-                .map_err(|error| auth_storage_error("delete", &error))?;
+            let mut deleted = false;
+            let outcome = mutate_auth_bundle(secret_store, |bundle| {
+                deleted = bundle
+                    .meta
+                    .take()
+                    .and_then(|meta| meta.access_token)
+                    .is_some();
+            })
+            .map_err(|error| auth_storage_error("delete", &error))?;
 
             Ok(meta_command_result(
                 json!({
                     "provider": "meta",
                     "deleted": deleted,
+                    "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
                     "credential_store_service": AUTH_BUNDLE_SERVICE,
                     "credential_store_account": AUTH_BUNDLE_ACCOUNT,
                 }),
@@ -1403,7 +1404,7 @@ fn resolve_time_input(
     ))
 }
 
-fn resolve_auth_token_input(args: &AuthSetArgs) -> Result<String, MetaAdsError> {
+pub(crate) fn resolve_auth_token_input(args: &AuthSetArgs) -> Result<String, MetaAdsError> {
     let token = if args.stdin {
         read_input(Path::new("-"))?
     } else {
@@ -1424,7 +1425,7 @@ fn prompt_for_auth_token() -> Result<String, MetaAdsError> {
     prompt_password("Meta access token: ").map_err(MetaAdsError::Io)
 }
 
-fn auth_storage_error(action: &str, error: &impl std::fmt::Display) -> MetaAdsError {
+pub(crate) fn auth_storage_error(action: &str, error: &impl std::fmt::Display) -> MetaAdsError {
     MetaAdsError::Config(format!(
         "failed to {action} the Meta token in the OS credential store: {error}{}",
         linux_secure_storage_hint()

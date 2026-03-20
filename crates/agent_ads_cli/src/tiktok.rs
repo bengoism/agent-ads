@@ -16,7 +16,7 @@ use agent_ads_core::tiktok_endpoints::{
 };
 use agent_ads_core::tiktok_error::TikTokError;
 use agent_ads_core::{
-    load_auth_bundle, store_auth_bundle, AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
+    load_auth_bundle, mutate_auth_bundle, AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
 use clap::{Args, Subcommand};
 use rpassword::prompt_password;
@@ -360,32 +360,28 @@ pub fn handle_auth(
     match command {
         AuthCommand::Set(args) => {
             let inputs = resolve_tiktok_auth_inputs(&args)?;
-            let mut bundle = load_auth_bundle(secret_store)
-                .map_err(|error| tiktok_auth_storage_error("store TikTok credentials", &error))?;
-            let mut tiktok_bundle = bundle.tiktok.take().unwrap_or_default();
-
-            let mut credentials_stored = vec!["access_token"];
-            tiktok_bundle.access_token = Some(inputs.access_token);
-            if let Some(app_id) = inputs.app_id {
-                tiktok_bundle.app_id = Some(app_id);
-                credentials_stored.push("app_id");
-            }
-            if let Some(app_secret) = inputs.app_secret {
-                tiktok_bundle.app_secret = Some(app_secret);
-                credentials_stored.push("app_secret");
-            }
-            if let Some(refresh_token) = inputs.refresh_token {
-                tiktok_bundle.refresh_token = Some(refresh_token);
-                credentials_stored.push("refresh_token");
-            }
-            bundle.tiktok = Some(tiktok_bundle);
-            store_auth_bundle(secret_store, &bundle)
-                .map_err(|error| tiktok_auth_storage_error("store TikTok credentials", &error))?;
+            let credentials_stored = tiktok_credentials_stored(&inputs);
+            let outcome = mutate_auth_bundle(secret_store, move |bundle| {
+                let mut tiktok_bundle = bundle.tiktok.take().unwrap_or_default();
+                tiktok_bundle.access_token = Some(inputs.access_token);
+                if let Some(app_id) = inputs.app_id {
+                    tiktok_bundle.app_id = Some(app_id);
+                }
+                if let Some(app_secret) = inputs.app_secret {
+                    tiktok_bundle.app_secret = Some(app_secret);
+                }
+                if let Some(refresh_token) = inputs.refresh_token {
+                    tiktok_bundle.refresh_token = Some(refresh_token);
+                }
+                bundle.tiktok = Some(tiktok_bundle);
+            })
+            .map_err(|error| tiktok_auth_storage_error("store TikTok credentials", &error))?;
 
             Ok(tiktok_command_result(
                 json!({
                     "provider": "tiktok",
                     "stored": true,
+                    "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
                     "credentials_stored": credentials_stored,
                 }),
                 "/tiktok/auth/set",
@@ -398,27 +394,30 @@ pub fn handle_auth(
             0,
         )),
         AuthCommand::Delete => {
-            let mut bundle = load_auth_bundle(secret_store)
-                .map_err(|error| tiktok_auth_storage_error("delete TikTok credentials", &error))?;
-            let deleted_tiktok = bundle.tiktok.take();
-            let deleted_app_id = deleted_tiktok
-                .as_ref()
-                .and_then(|tiktok| tiktok.app_id.as_ref())
-                .is_some();
-            let deleted_app_secret = deleted_tiktok
-                .as_ref()
-                .and_then(|tiktok| tiktok.app_secret.as_ref())
-                .is_some();
-            let deleted_access = deleted_tiktok
-                .as_ref()
-                .and_then(|tiktok| tiktok.access_token.as_ref())
-                .is_some();
-            let deleted_refresh = deleted_tiktok
-                .as_ref()
-                .and_then(|tiktok| tiktok.refresh_token.as_ref())
-                .is_some();
-            store_auth_bundle(secret_store, &bundle)
-                .map_err(|error| tiktok_auth_storage_error("delete TikTok credentials", &error))?;
+            let mut deleted_app_id = false;
+            let mut deleted_app_secret = false;
+            let mut deleted_access = false;
+            let mut deleted_refresh = false;
+            let outcome = mutate_auth_bundle(secret_store, |bundle| {
+                let deleted_tiktok = bundle.tiktok.take();
+                deleted_app_id = deleted_tiktok
+                    .as_ref()
+                    .and_then(|tiktok| tiktok.app_id.as_ref())
+                    .is_some();
+                deleted_app_secret = deleted_tiktok
+                    .as_ref()
+                    .and_then(|tiktok| tiktok.app_secret.as_ref())
+                    .is_some();
+                deleted_access = deleted_tiktok
+                    .as_ref()
+                    .and_then(|tiktok| tiktok.access_token.as_ref())
+                    .is_some();
+                deleted_refresh = deleted_tiktok
+                    .as_ref()
+                    .and_then(|tiktok| tiktok.refresh_token.as_ref())
+                    .is_some();
+            })
+            .map_err(|error| tiktok_auth_storage_error("delete TikTok credentials", &error))?;
 
             Ok(tiktok_command_result(
                 json!({
@@ -427,6 +426,7 @@ pub fn handle_auth(
                     "app_secret_deleted": deleted_app_secret,
                     "access_token_deleted": deleted_access,
                     "refresh_token_deleted": deleted_refresh,
+                    "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
                 }),
                 "/tiktok/auth/delete",
                 0,
@@ -456,17 +456,17 @@ pub async fn handle_auth_refresh(
     )
     .await?;
 
-    let mut bundle = load_auth_bundle(secret_store)
-        .map_err(|error| tiktok_auth_storage_error("store refreshed access token", &error))?;
-    let mut tiktok_bundle = bundle.tiktok.take().unwrap_or_default();
-    tiktok_bundle.access_token = Some(result.access_token.clone());
-
-    if let Some(new_refresh) = &result.refresh_token {
-        tiktok_bundle.refresh_token = Some(new_refresh.clone());
-    }
-    bundle.tiktok = Some(tiktok_bundle);
-    store_auth_bundle(secret_store, &bundle)
-        .map_err(|error| tiktok_auth_storage_error("store refreshed access token", &error))?;
+    let access_token = result.access_token.clone();
+    let refresh_token = result.refresh_token.clone();
+    let outcome = mutate_auth_bundle(secret_store, move |bundle| {
+        let mut tiktok_bundle = bundle.tiktok.take().unwrap_or_default();
+        tiktok_bundle.access_token = Some(access_token);
+        if let Some(new_refresh) = refresh_token {
+            tiktok_bundle.refresh_token = Some(new_refresh);
+        }
+        bundle.tiktok = Some(tiktok_bundle);
+    })
+    .map_err(|error| tiktok_auth_storage_error("store refreshed access token", &error))?;
 
     Ok(command_result(
         json!({
@@ -475,6 +475,7 @@ pub async fn handle_auth_refresh(
             "access_token_expire_in": result.access_token_expire_in,
             "refresh_token_expire_in": result.refresh_token_expire_in,
             "new_refresh_token_stored": result.refresh_token.is_some(),
+            "recovered_invalid_bundle": outcome.recovered_invalid_bundle,
         }),
         "/tiktok/auth/refresh",
         0,
@@ -978,14 +979,16 @@ fn resolve_tiktok_filter(
 }
 
 #[derive(Debug, Clone)]
-struct TikTokAuthInputs {
-    app_id: Option<String>,
-    app_secret: Option<String>,
-    access_token: String,
-    refresh_token: Option<String>,
+pub(crate) struct TikTokAuthInputs {
+    pub app_id: Option<String>,
+    pub app_secret: Option<String>,
+    pub access_token: String,
+    pub refresh_token: Option<String>,
 }
 
-fn resolve_tiktok_auth_inputs(args: &AuthSetArgs) -> Result<TikTokAuthInputs, TikTokError> {
+pub(crate) fn resolve_tiktok_auth_inputs(
+    args: &AuthSetArgs,
+) -> Result<TikTokAuthInputs, TikTokError> {
     if args.full {
         if args.stdin {
             let input =
@@ -1037,6 +1040,20 @@ fn resolve_tiktok_auth_inputs(args: &AuthSetArgs) -> Result<TikTokAuthInputs, Ti
         access_token,
         refresh_token,
     })
+}
+
+fn tiktok_credentials_stored(inputs: &TikTokAuthInputs) -> Vec<&'static str> {
+    let mut credentials_stored = vec!["access_token"];
+    if inputs.app_id.is_some() {
+        credentials_stored.push("app_id");
+    }
+    if inputs.app_secret.is_some() {
+        credentials_stored.push("app_secret");
+    }
+    if inputs.refresh_token.is_some() {
+        credentials_stored.push("refresh_token");
+    }
+    credentials_stored
 }
 
 fn parse_tiktok_auth_inputs_from_stdin(
@@ -1199,7 +1216,10 @@ fn normalize_optional_tiktok_value(
     Ok(Some(normalize_tiktok_value(value, token_kind)?))
 }
 
-fn tiktok_auth_storage_error(action: &str, error: &impl std::fmt::Display) -> TikTokError {
+pub(crate) fn tiktok_auth_storage_error(
+    action: &str,
+    error: &impl std::fmt::Display,
+) -> TikTokError {
     TikTokError::Config(format!(
         "failed to {action} in the OS credential store: {error}{}",
         tiktok_linux_secure_storage_hint()
