@@ -79,7 +79,7 @@ export default function ReferenceRoute() {
                 eyebrow={engine.eyebrow}
                 title={engine.name}
                 copy={`${generatedContent.references[engineId].length} guides. ${engine.referenceLead}`}
-                to={`/reference/${engineId}`}
+                to={`/engines/${engineId}`}
                 cta="Open engine docs"
                 tags={engine.tags}
               />

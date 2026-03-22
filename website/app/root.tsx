@@ -9,10 +9,11 @@ import {
   useLocation,
   useRouteError,
 } from "react-router";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import appStylesHref from "./app.css?url";
 import { headerLinks, repoLinks, sidebarNav } from "./content/site";
 import { btnPrimary, eyebrowCls, useRevealObserver } from "./components/docs";
+import { TocProvider, useTocItems } from "./components/toc-context";
 
 export const links = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -43,11 +44,68 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 }
 
+function useActiveId(ids: string[]) {
+  const [activeId, setActiveId] = useState("");
+  useEffect(() => {
+    if (!ids.length) return;
+    const elements = ids
+      .map((id) => document.getElementById(id))
+      .filter(Boolean) as HTMLElement[];
+    if (!elements.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setActiveId(entry.target.id);
+          }
+        }
+      },
+      { rootMargin: "0px 0px -65% 0px", threshold: 0 },
+    );
+    for (const el of elements) observer.observe(el);
+    return () => observer.disconnect();
+  }, [ids]);
+  return activeId;
+}
+
+function RightToc() {
+  const items = useTocItems();
+  const activeId = useActiveId(items.map((i) => i.id));
+  if (!items.length) return null;
+  return (
+    <aside
+      className="hidden lg:block sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto py-5 pr-3"
+      aria-label="On this page"
+    >
+      <nav className="grid gap-[0.15rem]">
+        <div className="text-[0.68rem] font-bold tracking-[0.1em] uppercase text-fg-dim py-2 px-3 pb-[0.15rem]">
+          On this page
+        </div>
+        {items.map((item) => (
+          <a
+            key={item.id}
+            href={`#${item.id}`}
+            className={`block py-[0.35rem] px-3 rounded text-[0.82rem] transition-[background,color] duration-150 motion-reduce:transition-none truncate ${
+              activeId === item.id
+                ? "text-accent bg-accent/8"
+                : "text-fg-muted hover:text-fg hover:bg-surface-highest/35"
+            }`}
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+
 export default function App() {
   const location = useLocation();
   useRevealObserver(location.pathname);
 
   return (
+    <TocProvider>
     <div className="relative">
       {/* ── Topbar ─────────────────────────────────────────── */}
       <header className="fixed inset-x-0 top-0 z-30 flex items-center justify-between h-14 px-4 md:px-[1.35rem] bg-surface/92 backdrop-blur-[20px] border-b-[0.5px] border-outline">
@@ -77,7 +135,7 @@ export default function App() {
       </header>
 
       {/* ── App shell ──────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] max-w-[1440px] mx-auto pt-14 min-h-screen">
+      <div className="grid grid-cols-1 md:grid-cols-[15rem_minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)_14rem] max-w-[1440px] mx-auto pt-14 min-h-screen">
         {/* ── Sidebar ────────────────────────────────────── */}
         <aside
           className="hidden md:block sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-r-[0.5px] border-outline py-5"
@@ -194,8 +252,11 @@ export default function App() {
             </div>
           </footer>
         </main>
+
+        <RightToc />
       </div>
     </div>
+    </TocProvider>
   );
 }
 
