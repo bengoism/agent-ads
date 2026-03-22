@@ -234,11 +234,6 @@ export default function App() {
           </div>
 
           <footer className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between py-6 mt-8 border-t-[0.5px] border-outline text-[0.78rem] text-fg-dim uppercase tracking-[0.06em]">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green" />
-              <span>NETWORK STATUS:</span>
-              <span className="text-green">OPERATIONAL</span>
-            </div>
             <div className="flex items-center gap-6">
               <a href={repoLinks.github} target="_blank" rel="noreferrer" className="hover:text-fg-muted">
                 X / Twitter
