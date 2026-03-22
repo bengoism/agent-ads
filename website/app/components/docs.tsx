@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { Link } from "react-router";
 import remarkGfm from "remark-gfm";
+import { CodeBlock } from "./code-block";
+import { tokenizeShell } from "./tokenize-shell";
 
 /* ─── Shared class-string constants ─────────────────────── */
 
@@ -177,16 +179,11 @@ export function CommandPanel({
         compact ? "p-[0.9rem]" : "p-4"
       }`}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <span className={eyebrowCls}>{eyebrow}</span>
-          <div className="mt-1 text-fg text-[0.95rem] font-semibold leading-[1.5]">{title}</div>
-        </div>
-        <CopyButton copyKey={copyKey} text={command} />
+      <div>
+        <span className={eyebrowCls}>{eyebrow}</span>
+        <div className="mt-1 text-fg text-[0.95rem] font-semibold leading-[1.5]">{title}</div>
       </div>
-      <pre className="m-0 max-w-full overflow-x-auto p-4 rounded bg-[rgba(10,10,11,0.95)] border-[0.5px] border-outline text-accent text-[0.88rem] leading-[1.6]">
-        <code>{command}</code>
-      </pre>
+      <CodeBlock code={command} language="bash" />
     </div>
   );
 }
@@ -267,19 +264,20 @@ export function MarkdownBlock({
 
             return <Link to={hrefValue}>{children}</Link>;
           },
+          pre: ({ children }) => {
+            return <>{children}</>;
+          },
           code: ({ className: codeClassName, children, ...props }) => {
-            const isInline = !codeClassName;
+            const langMatch = codeClassName?.match(/language-(\w+)/);
+            const isBlock = langMatch != null || (typeof children === "string" && children.includes("\n"));
 
-            if (isInline) {
-              return (
-                <code className="markdown__inline-code" {...props}>
-                  {children}
-                </code>
-              );
+            if (isBlock) {
+              const code = String(children).replace(/\n$/, "");
+              return <CodeBlock code={code} language={langMatch?.[1]} />;
             }
 
             return (
-              <code className={codeClassName} {...props}>
+              <code className="markdown__inline-code" {...props}>
                 {children}
               </code>
             );
@@ -314,8 +312,7 @@ export function RouteCard({
 }) {
   return (
     <article
-      className="relative overflow-hidden grid gap-[0.9rem] p-[1.2rem] rounded bg-surface-low border-[0.5px] border-outline shadow-ambient reveal"
-      data-reveal
+      className="relative overflow-hidden grid gap-[0.9rem] p-[1.2rem] rounded bg-surface-low border-[0.5px] border-outline shadow-ambient"
     >
       <span className={eyebrowCls}>{eyebrow}</span>
       <h3 className="m-0 text-[clamp(1.4rem,2.2vw,2rem)] leading-[1.08] tracking-[-0.04em]">
@@ -333,6 +330,32 @@ export function RouteCard({
   );
 }
 
+const SHELL_TOKEN_CLASSES: Record<string, string> = {
+  command: "text-syn-blue font-bold",
+  subcommand: "text-syn-fg",
+  flag: "text-syn-cyan",
+  string: "text-syn-green",
+  value: "text-syn-orange",
+  pipe: "text-syn-comment",
+  comment: "text-syn-comment italic",
+  "env-var": "text-syn-yellow",
+  keyword: "text-syn-purple",
+  plain: "",
+};
+
+function ShellLine({ text }: { text: string }) {
+  const [tokens] = tokenizeShell(text);
+  return (
+    <span>
+      {tokens.map((token, i) => (
+        <span key={i} className={SHELL_TOKEN_CLASSES[token.type] ?? ""}>
+          {token.text}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function TerminalBlock({
   filename,
   headerComment,
@@ -344,36 +367,6 @@ export function TerminalBlock({
   lines: Array<{ num: string; text: string; highlight?: string[] }>;
   comment?: string;
 }) {
-  function highlightText(text: string, highlights?: string[]) {
-    if (!highlights?.length) {
-      return <span className="text-fg-muted">{text}</span>;
-    }
-
-    const parts: ReactNode[] = [];
-    let remaining = text;
-    let keyIndex = 0;
-
-    for (const hl of highlights) {
-      const idx = remaining.indexOf(hl);
-      if (idx === -1) continue;
-      if (idx > 0) {
-        parts.push(remaining.slice(0, idx));
-      }
-      parts.push(
-        <span key={keyIndex++} className="text-green font-bold">
-          {hl}
-        </span>,
-      );
-      remaining = remaining.slice(idx + hl.length);
-    }
-
-    if (remaining) {
-      parts.push(remaining);
-    }
-
-    return <span className="text-fg-muted">{parts}</span>;
-  }
-
   return (
     <div className="rounded-lg overflow-hidden bg-surface-lowest border-[0.5px] border-outline">
       <div className="flex items-center justify-between py-[0.65rem] px-[0.85rem] bg-surface-low border-b-[0.5px] border-outline">
@@ -396,7 +389,7 @@ export function TerminalBlock({
         {lines.map((line) => (
           <div key={line.num} className="flex gap-3 leading-[1.7] text-[0.84rem]">
             <span className="text-fg-dim select-none min-w-6 text-right">{line.num}</span>
-            {highlightText(line.text, line.highlight)}
+            <ShellLine text={line.text} />
           </div>
         ))}
       </div>

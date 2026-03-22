@@ -127,34 +127,65 @@ export const engines: Record<EngineId, EngineMeta> = {
   },
 };
 
-export const homePromptCards = [
+export const homeCLIExamples = [
   {
-    id: "tiktok-performance",
-    category: "TikTok Performance",
-    prompt: "What's my TikTok campaign performance this month?",
+    id: "meta-insights",
+    engine: "Meta",
+    label: "Spend by age and gender",
     command:
-      "$ agent-ads tiktok insights query \\\n  --time-range this_month",
+      "$ agent-ads meta insights query \\\n  --account act_12345678 \\\n  --fields spend,impressions,cpc,actions \\\n  --breakdowns age,gender \\\n  --date-preset last_7d",
   },
   {
-    id: "pixel-health",
-    category: "Pixel Health",
-    prompt: 'Check if my Meta pixel is working',
+    id: "google-gaql",
+    engine: "Google",
+    label: "Campaign cost and conversions",
     command:
-      '$ agent-ads meta pixel-health get \\\n  --pixel-id "pix_98765"',
+      '$ agent-ads google gaql search \\\n  --customer-id 123-456-7890 \\\n  --query "SELECT campaign.name,\n    metrics.cost_micros, metrics.conversions\n    FROM campaign\n    WHERE segments.date DURING LAST_30_DAYS"',
+  },
+  {
+    id: "tiktok-insights",
+    engine: "TikTok",
+    label: "Campaign-level CPA",
+    command:
+      "$ agent-ads tiktok insights query \\\n  --advertiser-id 7012345678901234 \\\n  --data-level AUCTION_CAMPAIGN \\\n  --dimensions campaign_id \\\n  --metrics spend,conversion,cost_per_conversion",
+  },
+  {
+    id: "pinterest-targeting",
+    engine: "Pinterest",
+    label: "Spend by gender and age",
+    command:
+      "$ agent-ads pinterest targeting-analytics query \\\n  --ad-account-id 549764106178 \\\n  --targeting-type GENDER,AGE_BUCKET \\\n  --columns SPEND,CLICKTHROUGH_1",
+  },
+] as const;
+
+export const homePromptCards = [
+  {
+    id: "meta-insights",
+    category: "Meta Insights",
+    prompt: "Break down last week's Meta spend by age and gender",
+    command:
+      "$ agent-ads meta insights query \\\n  --account act_12345678 \\\n  --fields spend,cpc,actions \\\n  --breakdowns age,gender \\\n  --date-preset last_7d",
   },
   {
     id: "google-gaql",
     category: "Google GAQL",
-    prompt: "Run a GAQL search for all active Google campaigns",
+    prompt: "Which Google campaigns spent the most last month?",
     command:
-      '$ agent-ads google gaql search \\\n  --query "SELECT campaign.name FROM\n  campaign..."',
+      '$ agent-ads google gaql search \\\n  --customer-id 123-456-7890 \\\n  --query "SELECT campaign.name,\n    metrics.cost_micros\n    FROM campaign\n    WHERE segments.date DURING LAST_30_DAYS\n    ORDER BY metrics.cost_micros DESC"',
   },
   {
-    id: "pinterest-reports",
-    category: "Pinterest Reports",
-    prompt: "Submit a Pinterest report and wait for the results",
+    id: "tiktok-performance",
+    category: "TikTok Performance",
+    prompt: "Show me cost per conversion for each TikTok campaign",
     command:
-      "$ agent-ads pinterest report-runs submit \\\n  --sync true",
+      "$ agent-ads tiktok insights query \\\n  --advertiser-id 7012345678901234 \\\n  --data-level AUCTION_CAMPAIGN \\\n  --metrics spend,conversion,cost_per_conversion",
+  },
+  {
+    id: "pinterest-conversions",
+    category: "Pinterest Conversions",
+    prompt: "How are my Pinterest conversions trending this week?",
+    command:
+      "$ agent-ads pinterest analytics query \\\n  --ad-account-id 549764106178 \\\n  --columns TOTAL_CONVERSIONS,TOTAL_PAGE_VISIT \\\n  --start-date 2026-03-15 --end-date 2026-03-22",
   },
 ] as const;
 
@@ -172,13 +203,13 @@ export const performanceFeatures = [
 export const performanceCode = {
   filename: "example.sh",
   lines: [
-    { num: "01", text: "agent-ads query meta \\", highlight: ["agent-ads"] },
+    { num: "01", text: "agent-ads meta insights query \\", highlight: ["agent-ads"] },
     { num: "02", text: '  --account-id "act_12345678" \\', highlight: ["act_12345678"] },
-    { num: "03", text: '  --fields "name,status,spend" \\', highlight: ["name,status,spend"] },
-    { num: "04", text: "  --format json \\", highlight: ["json"] },
-    { num: "05", text: "  --output ./reports/daily.json", highlight: ["./reports/daily.json"] },
+    { num: "03", text: '  --fields "campaign_name,spend,impressions" \\', highlight: ["campaign_name,spend,impressions"] },
+    { num: "04", text: "  --date-preset last_7d \\", highlight: ["last_7d"] },
+    { num: "05", text: "  --envelope", highlight: ["--envelope"] },
   ],
-  comment: "// Processed 1.2k rows in 142ms",
+  comment: "// 1.2k rows in 142ms",
 } as const;
 
 // Keep backward-compatible aliases for generated content that uses "providers"

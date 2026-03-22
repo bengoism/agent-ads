@@ -30,7 +30,7 @@ function resolveSkillHref(href: string) {
   const engineId = fileName.replace(/\.md$/, "");
 
   if (["meta", "google", "tiktok", "pinterest"].includes(engineId)) {
-    return `/reference/${engineId}`;
+    return `/engines/${engineId}`;
   }
 
   return href;

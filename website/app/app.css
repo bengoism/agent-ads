@@ -15,6 +15,15 @@
   --color-green: #6ffbbe;
   --color-outline: rgba(70, 69, 84, 0.32);
   --color-outline-strong: rgba(70, 69, 84, 0.56);
+  --color-syn-blue: #61afef;
+  --color-syn-green: #98c379;
+  --color-syn-yellow: #e5c07b;
+  --color-syn-purple: #c678dd;
+  --color-syn-cyan: #56b6c2;
+  --color-syn-red: #e06c75;
+  --color-syn-orange: #d19a66;
+  --color-syn-comment: #5c6370;
+  --color-syn-fg: #abb2bf;
   --font-sans: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   --font-serif: "Playfair Display", serif;
@@ -22,6 +31,21 @@
   --breakpoint-sm: 640px;
   --breakpoint-md: 920px;
   --breakpoint-lg: 1120px;
+}
+
+/* ─── Sugar-high syntax highlighting tokens ─────────────── */
+
+:root {
+  --sh-class: var(--color-syn-yellow);
+  --sh-identifier: var(--color-syn-fg);
+  --sh-sign: var(--color-syn-cyan);
+  --sh-property: var(--color-syn-red);
+  --sh-entity: var(--color-syn-orange);
+  --sh-jsxliterals: var(--color-syn-red);
+  --sh-string: var(--color-syn-green);
+  --sh-keyword: var(--color-syn-purple);
+  --sh-comment: var(--color-syn-comment);
+  --sh-break: var(--color-syn-fg);
 }
 
 @layer base {
