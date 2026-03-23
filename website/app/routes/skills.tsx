@@ -5,7 +5,6 @@ import { CodeBlock } from "../components/code-block";
 import {
   btnPrimary,
   btnSecondary,
-  CommandPanel,
   eyebrowCls,
   MarkdownBlock,
   SectionHeader,
@@ -52,43 +51,52 @@ export default function SkillsRoute() {
   return (
     <>
       <section id="skill-install" className="grid gap-6">
-        <SectionHeader
-          eyebrow="Skill"
-          title="Install the skill"
-          copy="Useful for Codex, Claude Code, and similar agents because it keeps provider routing explicit, points the agent to the right provider docs, and reduces made-up cross-provider commands."
-        />
-
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-          <Link className={btnPrimary} to="/reference">
-            Browse providers
-          </Link>
-          <Link className={btnSecondary} to="/auth">
-            Browse auth
-          </Link>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
-          <CommandPanel
-            eyebrow="Install"
-            title="Install the public skill"
-            command={skillInstallCommand}
-            copyKey="skills-install"
-          />
-
-          <article className="grid gap-4 p-4 rounded bg-gradient-to-b from-[rgba(32,31,32,0.96)] to-[rgba(16,16,17,0.98)] border-[0.5px] border-outline shadow-ambient">
-            <span className={eyebrowCls}>Why it helps</span>
-            <h2 className="m-0 text-[1.2rem] leading-[1.15] tracking-[-0.03em]">
+        <article className="grid gap-6 p-[1.2rem] rounded bg-gradient-to-b from-[rgba(28,27,28,0.96)] to-[rgba(16,16,17,0.98)] border-[0.5px] border-outline shadow-ambient lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
+          <div className="grid gap-4">
+            <span className={eyebrowCls}>Skill</span>
+            <h1 className="m-0 text-[clamp(1.9rem,3vw,2.8rem)] leading-[0.98] tracking-[-0.05em]">
               Useful for agents
-            </h2>
+            </h1>
+            <p className="m-0 text-fg-muted leading-[1.72] max-w-[34rem]">
+              Use the public skill with Codex, Claude Code, and similar agents when you want the
+              agent to stay inside the real provider-first CLI instead of inventing a generic ads
+              abstraction.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <span className="inline-flex items-center py-[0.35rem] px-[0.65rem] rounded bg-accent/12 text-accent text-[0.72rem] font-bold tracking-[0.06em] uppercase">
+                Provider-first
+              </span>
+              <span className="inline-flex items-center py-[0.35rem] px-[0.65rem] rounded bg-surface-highest/52 text-fg-muted text-[0.72rem] font-bold tracking-[0.06em] uppercase">
+                Explicit commands
+              </span>
+              <span className="inline-flex items-center py-[0.35rem] px-[0.65rem] rounded bg-surface-highest/52 text-fg-muted text-[0.72rem] font-bold tracking-[0.06em] uppercase">
+                Provider docs
+              </span>
+            </div>
+            <div className="grid gap-2">
+              <span className={eyebrowCls}>Install</span>
+              <CodeBlock
+                code={skillInstallCommand}
+                language="bash"
+                showHeader={false}
+                copyable={true}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 p-4 rounded bg-[rgba(14,14,15,0.72)] border-[0.5px] border-outline">
+            <span className={eyebrowCls}>How agents use it</span>
             <p className="m-0 text-fg-muted leading-[1.72]">
-              The skill gives agents a tighter path through the CLI: start with available
-              providers, confirm auth state, then route into the provider guide that matches the
-              task instead of inventing a generic ad-platform command surface.
+              The skill narrows the search space for the agent: inspect providers, confirm auth,
+              then jump to the right provider guide before composing a command.
             </p>
             <ul className="m-0 pl-5 grid gap-2 text-fg-muted leading-[1.62]">
-              <li>Keep commands explicit with <code className="markdown__inline-code">agent-ads &lt;provider&gt; ...</code></li>
+              <li>
+                Keep commands explicit with{" "}
+                <code className="markdown__inline-code">agent-ads &lt;provider&gt; ...</code>
+              </li>
               <li>Route Meta, Google, TikTok, Pinterest, LinkedIn, and X work into the right docs</li>
-              <li>Reduce wrong flags, wrong auth models, and cross-provider guesswork</li>
+              <li>Reduce wrong flags, auth mixups, and cross-provider guesswork</li>
             </ul>
             <div className="grid gap-2">
               <span className={eyebrowCls}>Start here</span>
@@ -99,8 +107,16 @@ export default function SkillsRoute() {
                 copyable={true}
               />
             </div>
-          </article>
-        </div>
+            <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+              <Link className={btnPrimary} to="/reference">
+                Browse providers
+              </Link>
+              <Link className={btnSecondary} to="/auth">
+                Browse auth
+              </Link>
+            </div>
+          </div>
+        </article>
       </section>
 
       <section id={commonTasks.id} className="grid gap-6">
