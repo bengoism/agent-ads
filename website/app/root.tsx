@@ -10,6 +10,7 @@ import {
   useRouteError,
 } from "react-router";
 import { useEffect, useState, type ReactNode } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import appStylesHref from "./app.css?url";
 import { headerLinks, repoLinks, sidebarNav } from "./content/site";
 import { btnPrimary, eyebrowCls, useRevealObserver } from "./components/docs";
@@ -37,6 +38,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </head>
       <body>
         {children}
+        <Analytics />
         <ScrollRestoration />
         <Scripts />
       </body>
