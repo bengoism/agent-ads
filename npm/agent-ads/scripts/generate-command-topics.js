@@ -168,6 +168,47 @@ const sections = [
         language: "text"
     },
     {
+        title: "LinkedIn Topic",
+        intro: "The LinkedIn provider covers the LinkedIn Marketing API.",
+        args: ["linkedin", "--help"],
+        language: "text"
+    },
+    {
+        title: "LinkedIn Ad Accounts",
+        args: ["linkedin", "ad-accounts", "--help"],
+        language: "text"
+    },
+    {
+        title: "LinkedIn Campaign Groups",
+        args: ["linkedin", "campaign-groups", "--help"],
+        language: "text"
+    },
+    {
+        title: "LinkedIn Campaigns",
+        args: ["linkedin", "campaigns", "--help"],
+        language: "text"
+    },
+    {
+        title: "LinkedIn Creatives",
+        args: ["linkedin", "creatives", "--help"],
+        language: "text"
+    },
+    {
+        title: "LinkedIn Analytics",
+        args: ["linkedin", "analytics", "--help"],
+        language: "text"
+    },
+    {
+        title: "LinkedIn Auth",
+        args: ["linkedin", "auth", "--help"],
+        language: "text"
+    },
+    {
+        title: "LinkedIn Config",
+        args: ["linkedin", "config", "--help"],
+        language: "text"
+    },
+    {
         title: "Google Topic",
         intro: "The Google provider covers read-only Google Ads and native GAQL access.",
         args: ["google", "--help"],

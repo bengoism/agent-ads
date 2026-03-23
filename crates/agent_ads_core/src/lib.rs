@@ -9,6 +9,10 @@ pub mod google_client;
 pub mod google_config;
 pub mod google_error;
 pub mod ids;
+pub mod linkedin_client;
+pub mod linkedin_config;
+pub mod linkedin_endpoints;
+pub mod linkedin_error;
 pub mod output;
 pub mod pinterest_auth;
 pub mod pinterest_client;
@@ -25,8 +29,8 @@ pub mod tiktok_error;
 pub use auth_bundle::{
     auth_bundle_error_is_recoverable, load_auth_bundle, lock_auth_bundle, mutate_auth_bundle,
     prepare_auth_bundle_for_update, store_auth_bundle, AuthBundle, AuthBundleLockGuard,
-    AuthBundleMutationOutcome, GoogleAuthBundle, MetaAuthBundle, PinterestAuthBundle,
-    TikTokAuthBundle, AUTH_BUNDLE_VERSION,
+    AuthBundleMutationOutcome, GoogleAuthBundle, LinkedInAuthBundle, MetaAuthBundle,
+    PinterestAuthBundle, TikTokAuthBundle, AUTH_BUNDLE_VERSION,
 };
 pub use client::{GraphClient, GraphResponse, Paging, PagingCursors};
 pub use config::{
@@ -41,6 +45,18 @@ pub use google_config::{
     GoogleSecretStatus, GOOGLE_DEFAULT_API_BASE_URL, GOOGLE_DEFAULT_API_VERSION,
 };
 pub use google_error::{GoogleApiError, GoogleError, GoogleResult};
+pub use linkedin_client::{
+    encode_path_segment as linkedin_encode_path_segment, LinkedInClient, LinkedInResponse,
+};
+pub use linkedin_config::{
+    linkedin_inspect, linkedin_inspect_auth, LinkedInAccessTokenSource, LinkedInAccessTokenStatus,
+    LinkedInAuthSnapshot, LinkedInConfigOverrides, LinkedInConfigSnapshot, LinkedInFileConfig,
+    LinkedInResolvedConfig, LINKEDIN_ADS_ACCESS_TOKEN_ENV_VAR, LINKEDIN_DEFAULT_API_BASE_URL,
+    LINKEDIN_DEFAULT_API_VERSION,
+};
+pub use linkedin_error::{
+    parse_linkedin_api_error, LinkedInApiError, LinkedInError, LinkedInResult,
+};
 pub use output::{OutputEnvelope, OutputFormat};
 pub use pinterest_auth::{
     refresh_access_token as pinterest_refresh_access_token, RefreshResult as PinterestRefreshResult,
