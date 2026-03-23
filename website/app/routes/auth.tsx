@@ -2,7 +2,7 @@ import { CommandPanel, SectionHeader } from "../components/docs";
 
 export const meta = () => [
   { title: "Auth | agent-ads" },
-  { name: "description", content: "Authentication setup for Meta, Google Ads, TikTok, Pinterest, and LinkedIn." },
+  { name: "description", content: "Authentication setup for Meta, Google Ads, TikTok, Pinterest, LinkedIn, and X." },
 ];
 
 export default function AuthRoute() {
@@ -12,7 +12,7 @@ export default function AuthRoute() {
         <SectionHeader
           eyebrow="Authentication"
           title="Auth"
-          copy="Each engine has its own credential model. The CLI resolves secrets with a fixed precedence: shell env > OS credential store. Secrets never come from flags or config files."
+          copy="Each provider has its own credential model. The CLI resolves secrets with a fixed precedence: shell env > OS credential store. Secrets never come from flags or config files."
         />
 
         <CommandPanel
@@ -101,6 +101,21 @@ export default function AuthRoute() {
           title="Refresh an expired token"
           command="agent-ads pinterest auth refresh"
           copyKey="pinterest-auth-refresh"
+        />
+      </section>
+
+      <section className="grid gap-6">
+        <SectionHeader
+          eyebrow="X"
+          title="X Authentication"
+          copy="X uses four OAuth 1.0a secrets: consumer key, consumer secret, access token, and access token secret."
+        />
+        <CommandPanel
+          compact
+          eyebrow="Store credentials"
+          title="Guided auth setup"
+          command="agent-ads x auth set"
+          copyKey="x-auth-set"
         />
       </section>
 

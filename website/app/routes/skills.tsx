@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { generatedContent } from "../generated/content";
-import { engineOrder, homePromptCards } from "../content/site";
+import { engineOrder, skillStartCommands } from "../content/site";
 import {
   btnPrimary,
   btnSecondary,
@@ -37,62 +37,60 @@ function resolveSkillHref(href: string) {
 }
 
 export const meta = () => [
-  { title: "Skills | agent-ads" },
+  { title: "Skill | agent-ads" },
   {
     name: "description",
     content:
-      "Agent integration guidance for agent-ads: prompts, glossary, command rules, engine routing, and operational constraints.",
+      "Operational skill guide for agent-ads: common tasks, command rules, provider routing, and shared CLI behavior.",
   },
 ];
 
 export default function SkillsRoute() {
-  const [whatYouCanAsk, ...remainingSections] = generatedContent.skills.sections;
-  const featuredWorkflow = homePromptCards[0];
+  const [commonTasks, ...remainingSections] = generatedContent.skills.sections;
 
   return (
     <>
       <PageHero
-        eyebrow="Agent integration"
+        eyebrow="Skill"
         title={
           <>
-            Translate prompts
-            <span className="text-fg/78"> into explicit engine commands.</span>
+            Keep provider
+            <span className="text-fg/78"> routing explicit.</span>
           </>
         }
         lede={generatedContent.skills.description}
-        detail="Prompt routing guide"
+        detail="Operational guide"
         actions={
           <>
-            <Link className={btnPrimary} to="/engines/meta">
-              Browse engines
+            <Link className={btnPrimary} to="/reference">
+              Browse providers
             </Link>
-            <Link className={btnSecondary} to="/reference">
-              Browse reference docs
+            <Link className={btnSecondary} to="/auth">
+              Browse auth
             </Link>
           </>
         }
         aside={
           <CommandPanel
-            eyebrow="Example workflow"
-            title={featuredWorkflow.prompt}
-            command={featuredWorkflow.command}
-            copyKey="skills-translation"
+            eyebrow="Start here"
+            title="Inspect providers and auth state"
+            command={skillStartCommands}
+            copyKey="skills-start"
           />
         }
       />
 
-      <section id={whatYouCanAsk.id} className="grid gap-6">
+      <section id={commonTasks.id} className="grid gap-6">
         <SectionHeader
-          eyebrow="Examples"
-          title="What agents can ask"
-          copy={whatYouCanAsk.summary}
+          eyebrow="Tasks"
+          title="Common tasks"
+          copy={commonTasks.summary}
         />
 
         <article
-          className="grid gap-5 relative overflow-hidden p-[1.2rem] rounded bg-gradient-to-b from-[rgba(32,31,32,0.96)] to-[rgba(16,16,17,0.98)] shadow-ambient reveal"
-          data-reveal
+          className="grid gap-5 relative overflow-hidden p-[1.2rem] rounded bg-gradient-to-b from-[rgba(32,31,32,0.96)] to-[rgba(16,16,17,0.98)] shadow-ambient"
         >
-          <MarkdownBlock markdown={whatYouCanAsk.markdown} resolveHref={resolveSkillHref} />
+          <MarkdownBlock markdown={commonTasks.markdown} resolveHref={resolveSkillHref} />
         </article>
       </section>
 
@@ -100,8 +98,7 @@ export default function SkillsRoute() {
         <section key={section.id} id={section.id} className="grid gap-6">
           <SectionHeader eyebrow="Guide" title={section.title} copy={section.summary} />
           <article
-            className="grid gap-5 relative overflow-hidden p-[1.2rem] rounded bg-gradient-to-b from-[rgba(32,31,32,0.96)] to-[rgba(16,16,17,0.98)] shadow-ambient reveal"
-            data-reveal
+            className="grid gap-5 relative overflow-hidden p-[1.2rem] rounded bg-gradient-to-b from-[rgba(32,31,32,0.96)] to-[rgba(16,16,17,0.98)] shadow-ambient"
           >
             <MarkdownBlock markdown={section.markdown} resolveHref={resolveSkillHref} />
           </article>

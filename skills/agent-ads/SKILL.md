@@ -2,118 +2,63 @@
 name: agent-ads
 description: >
   Read-only CLI for Meta, Google, TikTok, Pinterest, LinkedIn, and X ad APIs. JSON to stdout.
-  Use when the user wants to query ad platform data — campaign insights, creatives,
-  audiences, or account discovery.
+  Use when the user wants explicit provider-prefixed commands for auth, account discovery,
+  reporting, creatives, tracking, audiences, or troubleshooting.
 ---
 
 # Agent Ads
 
-`agent-ads` is a read-only CLI for querying ad platform APIs. Meta, Google Ads, TikTok, Pinterest, LinkedIn, and X supported. Every command outputs JSON to stdout.
+`agent-ads` is a read-only CLI for querying ad platform APIs. Every command outputs JSON to stdout. Keep commands provider-specific: `agent-ads <provider> <command>`.
 
-## What You Can Ask
+## Common Tasks
 
-Plain-English prompts that work. The agent translates these into the right CLI commands.
+Use the skill for direct, provider-specific CLI work across the supported ad platforms.
 
-**Performance & reporting**
-- "Show me my Meta ad spend by campaign for the last 7 days"
-- "Run this GAQL query against Google Ads"
-- "What's my TikTok campaign performance this month?"
-- "What did my Pinterest campaigns spend last week?"
-- "Show me LinkedIn campaign performance for this month"
-- "Show me X campaign engagement for the last 7 days"
-- "Pull a daily breakdown of impressions and clicks across all campaigns"
-- "Export last week's Meta performance report to CSV"
-- "Run an async report for all my TikTok ads since January"
-- "Submit a Pinterest report run and wait for the result URL"
-
-**Accounts & campaigns**
-- "What businesses do I have access to in Meta?"
-- "List all my accessible Google Ads customers"
-- "List all my TikTok advertisers"
-- "List my Pinterest ad accounts"
-- "List my LinkedIn ad accounts"
-- "List my X ads accounts"
-- "Show me the campaigns in my Meta ad account"
-- "Which ad sets are running right now?"
-
-**Creative & tracking**
-- "Show my TikTok video creatives"
-- "Check if my Meta pixel is working"
-- "Find broken pixels across my Meta accounts"
-- "What audiences do I have in TikTok?"
-- "What audiences do I have in Pinterest?"
-- "What custom audiences do I have in X?"
-
-**Setup & troubleshooting**
-- "Show me which providers are already authenticated"
-- "Help me set up my Meta auth token"
-- "Is my TikTok token still valid?"
-- "Refresh my Pinterest token"
-- "Run a doctor check on my account"
-- "My token expired — how do I refresh it?"
-
-## Glossary
-
-Translating marketer language to CLI concepts:
-
-| You say | Platform | In the CLI |
-|---------|----------|------------|
-| business manager | Meta | `agent-ads meta businesses list` |
-| ad account | Meta | `--account act_123...` flag |
-| customer / account | Google | `--customer-id 1234567890` flag |
-| advertiser / ad account | TikTok | `--advertiser-id 123...` flag |
-| ad account | Pinterest | `--ad-account-id 123...` flag |
-| ad account | LinkedIn | `--account-id 123...` flag |
-| ads account | X | `--account-id 18ce...` flag |
-| campaign performance / report | Meta/TikTok | `insights query` command |
-| analytics / report | Pinterest | `analytics query`, `report-runs ...` |
-| analytics / report | LinkedIn | `analytics query --finder ...` |
-| analytics / report | X | `analytics query`, `analytics jobs ...` |
-| GAQL / query | Google | `gaql search`, `gaql search-stream` |
-| pixel / tag | Meta | `pixels list`, `pixel-health get` |
-| pixel | TikTok | `pixels list` |
-| audience / custom audience | TikTok | `audiences list` |
-| audience / custom audience | Pinterest | `audiences list`, `audiences get` |
-| creative / ad content | Meta | `creatives get`, `creatives preview` |
-| creative / video / image | TikTok | `creatives videos`, `creatives images` |
-| conversion tracking | Meta | `custom-conversions list`, `datasets get` |
-| token / access token | all | stored via `auth set` or shell env var |
+- Check available providers: `agent-ads providers list`
+- Check auth status across providers: `agent-ads auth status`
+- Discover Meta businesses and ad accounts
+- List Google Ads customers or run GAQL queries
+- Query TikTok, Pinterest, LinkedIn, or X reporting surfaces
+- Inspect creatives, pixels, audiences, and other provider-native objects
+- Run `agent-ads <provider> doctor` before troubleshooting auth or config
 
 ## Command Syntax Rules
 
-Every command starts with `agent-ads <provider>`. This is intentional — each ad platform has different APIs, auth, object models, and semantics, so the CLI keeps them separate rather than papering over differences.
+Every command starts with `agent-ads <provider>`. The CLI stays provider-first because each platform has its own auth model, object graph, and reporting semantics.
 
 - Canonical: `agent-ads meta insights query ...`
-- Never: `agent-ads insights query ...` (no implicit provider)
-- Never: `agent-ads meta:insights:query` (no colon syntax)
+- Never: `agent-ads insights query ...`
+- Never: `agent-ads meta:insights:query`
 
 ## Provider Routing
 
-| Provider | Status | First command | Reference guide |
-|----------|--------|---------------|-----------------|
-| `meta` | Implemented | `agent-ads meta --help` | [references/meta.md](references/meta.md) |
-| `google` | Implemented | `agent-ads google --help` | [references/google.md](references/google.md) |
-| `tiktok` | Implemented | `agent-ads tiktok --help` | [references/tiktok.md](references/tiktok.md) |
-| `pinterest` | Implemented | `agent-ads pinterest --help` | [references/pinterest.md](references/pinterest.md) |
-| `linkedin` | Implemented | `agent-ads linkedin --help` | [references/linkedin.md](references/linkedin.md) |
-| `x` | Implemented | `agent-ads x --help` | [references/x.md](references/x.md) |
+Start with the provider guide that matches the platform you need.
+
+| Provider | First command | Reference guide |
+|----------|---------------|-----------------|
+| `meta` | `agent-ads meta --help` | [references/meta.md](references/meta.md) |
+| `google` | `agent-ads google --help` | [references/google.md](references/google.md) |
+| `tiktok` | `agent-ads tiktok --help` | [references/tiktok.md](references/tiktok.md) |
+| `pinterest` | `agent-ads pinterest --help` | [references/pinterest.md](references/pinterest.md) |
+| `linkedin` | `agent-ads linkedin --help` | [references/linkedin.md](references/linkedin.md) |
+| `x` | `agent-ads x --help` | [references/x.md](references/x.md) |
 
 Check live: `agent-ads providers list`
 
 For a cross-provider auth summary or guided local setup, use `agent-ads auth`.
 
-Each routing guide tells you which specific reference file to load based on the task. Load only the file you need — do not preload all of them.
+Load only the provider guide you need. Do not preload all reference files.
 
 ## Shared Behavior
 
-These apply to every provider and every command.
+These rules apply to every provider.
 
 ### Output
 
-- **stdout**: data-only JSON by default (just the array or object, no wrapper)
+- **stdout**: data-only JSON by default
 - **stderr**: errors as JSON, warnings as plain text
 - **`--envelope`**: wraps stdout with `{ "data": ..., "meta": ..., "paging": ... }`
-- **Formats**: `--format json|jsonl|csv`, `--output <path>`, `--pretty`
+- **Common flags**: `--format json|jsonl|csv`, `--output <path>`, `--pretty`
 
 ### Config precedence
 
@@ -121,8 +66,8 @@ These apply to every provider and every command.
 - Non-secrets: CLI flags > shell env > `agent-ads.config.json`
 - Guided local auth setup: `agent-ads auth`
 - Persistent provider auth: `agent-ads <provider> auth set`
-- Shell override / CI: provider-specific env vars (e.g. `META_ADS_ACCESS_TOKEN`, `GOOGLE_ADS_REFRESH_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `PINTEREST_ADS_REFRESH_TOKEN`, `LINKEDIN_ADS_ACCESS_TOKEN`, `X_ADS_CONSUMER_KEY`)
-- Linux secure storage requires a running Secret Service provider (GNOME Keyring, KWallet)
+- Shell override / CI: provider-specific env vars
+- Linux secure storage requires a running Secret Service provider such as GNOME Keyring or KWallet
 
 ### Exit codes
 
@@ -141,7 +86,7 @@ These apply to every provider and every command.
 ### Global flags
 
 | Flag | Default | What it does |
-|------|---------|-------------|
+|------|---------|--------------|
 | `--config <path>` | `agent-ads.config.json` | Config file path |
 | `--format json\|jsonl\|csv` | `json` | Output format |
 | `--output <path>` | stdout | Write to file (`-` for stdout) |
@@ -152,25 +97,26 @@ These apply to every provider and every command.
 | `--timeout-seconds <n>` | `60` | HTTP request timeout |
 | `-q` / `-v` | warn | Quiet mode or verbose logging (`-vv` for debug) |
 
-Pagination flags differ by provider — see each provider's routing guide for details.
+Pagination flags differ by provider. Use `agent-ads <provider> --help` or the provider guide to confirm the exact shape.
 
 ## Common Issues
 
+These are the first checks worth making when commands fail.
+
 | Problem | What's happening | Fix |
-|---------|-----------------|-----|
-| "My token expired" | Meta tokens can be short-lived; TikTok tokens expire every 24 hours; Pinterest relies on OAuth refresh tokens | Meta: regenerate at [Graph API Explorer](https://developers.facebook.com/tools/explorer/) then `meta auth set`. TikTok: `tiktok auth refresh --app-id ... --app-secret ...`. Pinterest: `pinterest auth refresh` |
-| "I don't know my account ID" | You need to discover it first | Meta: `meta businesses list` then `meta ad-accounts list --business-id ...`. Google: `google customers list`. TikTok: `tiktok advertisers list --app-id ... --app-secret ...`. Pinterest: `pinterest ad-accounts list`. X: `x accounts list` |
-| "Permission denied" | Token is missing required scopes | Meta: regenerate token with `ads_read` (and `business_management` for discovery). TikTok: check app permissions in TikTok developer portal. Pinterest: regenerate app credentials/tokens with the required ads-read scope in the Pinterest developer portal |
-| "Command not found" | CLI not installed or not on PATH | Run `agent-ads --version`. If missing: `npm install -g agent-ads` |
-| "doctor says credential store unavailable" | No OS keychain on this machine (common on Linux servers) | Use shell env vars instead: `export META_ADS_ACCESS_TOKEN=...`, `export GOOGLE_ADS_REFRESH_TOKEN=...`, `export TIKTOK_ADS_ACCESS_TOKEN=...`, `export PINTEREST_ADS_REFRESH_TOKEN=...`, `export LINKEDIN_ADS_ACCESS_TOKEN=...`, or the four `X_ADS_*` variables |
-| "TikTok says 'advertiser-id is required'" | Most TikTok commands need an advertiser ID | Add `--advertiser-id <id>`, or set `default_advertiser_id` in config under `providers.tiktok` |
-| "Pinterest says 'ad account ID is required'" | Most Pinterest commands are scoped to an ad account | Add `--ad-account-id <id>`, or set `default_ad_account_id` in config under `providers.pinterest` |
-| "LinkedIn says 'account ID is required'" | Most LinkedIn commands are scoped to an ad account | Add `--account-id <id>`, or set `default_account_id` in config under `providers.linkedin` |
-| "X says 'account ID is required'" | Most X commands are scoped to one ads account | Add `--account-id <id>`, or set `default_account_id` in config under `providers.x` |
+|---------|------------------|-----|
+| "My token expired" | Meta tokens can be short-lived; TikTok access tokens expire every 24 hours; Pinterest uses OAuth refresh tokens | Meta: regenerate at [Graph API Explorer](https://developers.facebook.com/tools/explorer/) then run `meta auth set`. TikTok: run `tiktok auth refresh`. Pinterest: run `pinterest auth refresh` |
+| "I don't know my account ID" | Most providers require an explicit account, customer, or advertiser scope | Discover it first: Meta `businesses list` / `ad-accounts list`; Google `customers list`; TikTok `advertisers list`; Pinterest `ad-accounts list`; LinkedIn `ad-accounts list`; X `accounts list` |
+| "Permission denied" | The token is missing required scopes or account access | Re-check the provider auth guide and reissue credentials with the required read scope |
+| "doctor says credential store unavailable" | No OS keychain is available on this machine | Use provider-specific shell env vars for that session or CI job |
+| "<provider> says an ID is required" | The command is scoped and no default is configured | Pass the provider-specific ID flag or set the matching default in `providers.<provider>` config |
+| "Command not found" | The CLI is missing or not on `PATH` | Run `agent-ads --version`; if needed, install with `npm install -g agent-ads` |
 
 ## Stop Conditions
 
-- Do not drop the provider prefix (`agent-ads meta ...`, not `agent-ads ...`).
-- Do not invent cross-provider abstractions (no shared campaign/report/measurement schema).
-- Do not reuse Meta auth env vars (`META_ADS_ACCESS_TOKEN`) for other providers.
-- Do not guess flag names — use `agent-ads <provider> <command> --help` to confirm.
+Keep the command model explicit and provider-native.
+
+- Do not drop the provider prefix (`agent-ads meta ...`, not `agent-ads ...`)
+- Do not invent cross-provider abstractions or shared schemas
+- Do not reuse one provider's auth env vars for another provider
+- Do not guess flag names; confirm with `agent-ads <provider> <command> --help`

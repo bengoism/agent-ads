@@ -195,8 +195,7 @@ async function buildSkillsContent() {
   const description = firstParagraph(preamble);
 
   const sectionNames = [
-    "What You Can Ask",
-    "Glossary",
+    "Common Tasks",
     "Command Syntax Rules",
     "Provider Routing",
     "Shared Behavior",

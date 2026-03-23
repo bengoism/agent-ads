@@ -6,14 +6,13 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
-  useLocation,
   useRouteError,
 } from "react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import appStylesHref from "./app.css?url";
 import { headerLinks, repoLinks, sidebarNav } from "./content/site";
-import { btnPrimary, eyebrowCls, useRevealObserver } from "./components/docs";
+import { btnPrimary, eyebrowCls } from "./components/docs";
 import { TocProvider, useTocItems } from "./components/toc-context";
 
 export const links = () => [
@@ -103,9 +102,6 @@ function RightToc() {
 }
 
 export default function App() {
-  const location = useLocation();
-  useRevealObserver(location.pathname);
-
   return (
     <TocProvider>
     <div className="relative">
@@ -171,9 +167,9 @@ export default function App() {
 
             <div className="grid gap-[0.15rem]">
               <div className="text-[0.68rem] font-bold tracking-[0.1em] uppercase text-fg-dim py-2 px-3 pb-[0.15rem]">
-                {sidebarNav.engines.label}
+                {sidebarNav.providers.label}
               </div>
-              {sidebarNav.engines.items.map((item) => (
+              {sidebarNav.providers.items.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -213,7 +209,7 @@ export default function App() {
                   {item.label}
                 </NavLink>
               ))}
-              {sidebarNav.engines.items.map((item) => (
+              {sidebarNav.providers.items.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

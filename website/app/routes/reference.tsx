@@ -15,7 +15,7 @@ export const meta = () => [
   {
     name: "description",
     content:
-      "Full command reference for Meta, Google Ads, TikTok, Pinterest, and LinkedIn, with engine guides and workflow docs.",
+      "Full provider reference for Meta, Google Ads, TikTok, Pinterest, LinkedIn, and X, with routing guides and workflow docs.",
   },
 ];
 
@@ -27,11 +27,11 @@ export default function ReferenceRoute() {
           eyebrow="Reference"
           title={
             <>
-              Full command reference
-              <span className="text-fg/78"> for every engine.</span>
+              Full provider reference
+              <span className="text-fg/78"> for every surface.</span>
             </>
           }
-          lede="Browse the engine guides for Meta, Google Ads, TikTok, Pinterest, and LinkedIn when you need exact flags, auth requirements, or deeper workflow examples."
+          lede="Browse the provider guides for Meta, Google Ads, TikTok, Pinterest, LinkedIn, and X when you need exact flags, auth requirements, or deeper workflow examples."
           detail={`${engineOrder.reduce((c, id) => c + generatedContent.references[id].length, 0)} guides`}
           actions={
             <>
@@ -39,7 +39,7 @@ export default function ReferenceRoute() {
                 Quick Start
               </Link>
               <Link className={btnSecondary} to="/skills">
-                Agent integration
+                Skill guide
               </Link>
             </>
           }
@@ -65,9 +65,9 @@ export default function ReferenceRoute() {
 
       <section id="reference-engines" className="grid gap-6">
         <SectionHeader
-          eyebrow="Engines"
-          title="Open an engine guide"
-          copy="Each engine page groups the commands, auth details, and workflow docs that already exist for that surface."
+          eyebrow="Providers"
+          title="Open a provider guide"
+          copy="Each provider page groups the commands, auth details, and workflow docs that already exist for that surface."
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -80,7 +80,7 @@ export default function ReferenceRoute() {
                 title={engine.name}
                 copy={`${generatedContent.references[engineId].length} guides. ${engine.referenceLead}`}
                 to={`/engines/${engineId}`}
-                cta="Open engine docs"
+                cta="Open provider docs"
                 tags={engine.tags}
               />
             );

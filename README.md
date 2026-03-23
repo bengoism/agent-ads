@@ -789,6 +789,7 @@ For LinkedIn report queries, `linkedin analytics query` uses offset paging: `--s
 | 5 | Google API error |
 | 6 | Pinterest API error |
 | 7 | LinkedIn API error |
+| 8 | X API error |
 
 ## Docs Map
 
@@ -801,12 +802,13 @@ For LinkedIn report queries, `linkedin analytics query` uses offset paging: `--s
 | TikTok provider deep-dive | [skills/agent-ads/references/tiktok.md](skills/agent-ads/references/tiktok.md) |
 | Pinterest provider deep-dive | [skills/agent-ads/references/pinterest.md](skills/agent-ads/references/pinterest.md) |
 | LinkedIn provider deep-dive | [skills/agent-ads/references/linkedin.md](skills/agent-ads/references/linkedin.md) |
+| X provider deep-dive | [skills/agent-ads/references/x.md](skills/agent-ads/references/x.md) |
 | Full CLI reference (generated) | [docs/command-topics.md](docs/command-topics.md) |
-| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads google --help`, `agent-ads tiktok --help`, `agent-ads pinterest --help`, `agent-ads linkedin --help` |
+| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads google --help`, `agent-ads tiktok --help`, `agent-ads pinterest --help`, `agent-ads linkedin --help`, `agent-ads x --help` |
 
 ## Skills
 
-If you use this repo with an agent runtime (Claude Code, Codex, etc.), install the public skill:
+If you use this repo with an agent runtime, install the public skill:
 
 ```bash
 npx skills add bengoism/agent-ads
