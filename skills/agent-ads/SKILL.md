@@ -1,17 +1,14 @@
 ---
 name: agent-ads
 description: >
-  Operate the provider-first ads CLI from the terminal. Use when the user wants
-  to inspect available ad providers, route work into the implemented Meta,
-  Google, TikTok, or Pinterest providers, or keep ad-provider commands
-  explicit inside `agent-ads`.
+  Read-only CLI for Meta, Google, TikTok, and Pinterest ad APIs. JSON to stdout.
+  Use when the user wants to query ad platform data — campaign insights, creatives,
+  audiences, or account discovery.
 ---
 
 # Agent Ads
 
-`agent-ads` is a Unix-first CLI for querying ad platform APIs. It supports Meta (Facebook/Instagram) Marketing API, Google Ads, TikTok Business API, and Pinterest Ads API. All commands are read-only.
-
-This file is the only public skill entrypoint. It routes you to provider-specific reference docs.
+`agent-ads` is a read-only CLI for querying ad platform APIs. Meta, Google Ads, TikTok, and Pinterest supported. Every command outputs JSON to stdout.
 
 ## What You Can Ask
 
