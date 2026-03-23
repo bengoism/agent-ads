@@ -1,6 +1,6 @@
 # agent-ads
 
-CLI for querying ad platform APIs from the terminal. Meta, Google Ads, and TikTok supported. Read-only. Built in Rust, shipped as prebuilt native binaries.
+CLI for querying ad platform APIs from the terminal. Meta, Google Ads, TikTok, and Pinterest supported. Read-only. Built in Rust, shipped as prebuilt native binaries.
 
 ## Install
 
@@ -25,11 +25,21 @@ agent-ads meta insights query \
   --date-preset last_7d
 ```
 
-Google and TikTok follow the same pattern: `agent-ads google ...`, `agent-ads tiktok ...`.
+Google, TikTok, and Pinterest follow the same pattern: `agent-ads google ...`, `agent-ads tiktok ...`, `agent-ads pinterest ...`.
+
+## Claude Code Skill
+
+agent-ads ships as a skill for Claude Code. Install the CLI, then add the skill:
+
+```bash
+npx skills add https://github.com/bengoism/agent-ads --skill agent-ads
+```
+
+Your agent can now query any supported ad platform using plain English.
 
 ## Documentation
 
-Full docs, all three providers, examples, and configuration: [GitHub repo](https://github.com/bengoism/agent-ads)
+Full docs, all providers, examples, and configuration: [agent-ads.dev](https://agent-ads.dev/)
 
 ## License
 

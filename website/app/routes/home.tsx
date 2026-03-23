@@ -85,8 +85,8 @@ export default function HomeRoute() {
             </span>
           </h1>
           <p className="m-0 max-w-[36rem] text-fg-muted text-[1.05rem] leading-[1.7]">
-            Access Meta, Google, TikTok, and Pinterest through one CLI. Built
-            for agents like Claude Code to safely access campaign insights
+            Read-only access to Meta, Google, TikTok, and Pinterest through one CLI. Built
+            for agents like Claude Code to safely query campaign insights
             across multiple platforms.
           </p>
         </div>
