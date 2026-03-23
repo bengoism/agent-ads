@@ -28,6 +28,7 @@ const providerReferenceFiles = {
     "tiktok-workflows.md",
   ],
   pinterest: ["pinterest.md"],
+  linkedin: ["linkedin.md"],
 };
 
 function slugify(value) {
@@ -147,6 +148,7 @@ async function buildQuickStarts() {
     google: parseQuickStart(readme, "Google"),
     tiktok: parseQuickStart(readme, "TikTok"),
     pinterest: parseQuickStart(readme, "Pinterest"),
+    linkedin: parseQuickStart(readme, "LinkedIn"),
   };
 }
 

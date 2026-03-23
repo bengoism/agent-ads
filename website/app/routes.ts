@@ -8,6 +8,7 @@ export default [
   route("engines/google", "routes/engines.google.tsx"),
   route("engines/tiktok", "routes/engines.tiktok.tsx"),
   route("engines/pinterest", "routes/engines.pinterest.tsx"),
+  route("engines/linkedin", "routes/engines.linkedin.tsx"),
   route("reference", "routes/reference.tsx"),
   route("skills", "routes/skills.tsx"),
   route("*", "routes/not-found.tsx"),

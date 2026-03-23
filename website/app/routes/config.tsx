@@ -100,6 +100,13 @@ export default function ConfigRoute() {
           command="agent-ads pinterest doctor --api"
           copyKey="doctor-pinterest"
         />
+        <CommandPanel
+          compact
+          eyebrow="LinkedIn"
+          title="Verify LinkedIn setup"
+          command="agent-ads linkedin doctor --api"
+          copyKey="doctor-linkedin"
+        />
       </section>
     </>
   );

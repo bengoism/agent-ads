@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { generatedContent } from "../generated/content";
-import { homePromptCards } from "../content/site";
+import { engineOrder, homePromptCards } from "../content/site";
 import {
   btnPrimary,
   btnSecondary,
@@ -29,7 +29,7 @@ function resolveSkillHref(href: string) {
 
   const engineId = fileName.replace(/\.md$/, "");
 
-  if (["meta", "google", "tiktok", "pinterest"].includes(engineId)) {
+  if ((engineOrder as readonly string[]).includes(engineId)) {
     return `/engines/${engineId}`;
   }
 

@@ -20,7 +20,7 @@ export const meta = () => [
   {
     name: "description",
     content:
-      "Read-only CLI for Meta, Google, TikTok, and Pinterest ad APIs. JSON to stdout. Built in Rust. Works with Claude Code.",
+      "Read-only CLI for Meta, Google, TikTok, Pinterest, and LinkedIn ad APIs. JSON to stdout. Built in Rust. Works with Claude Code.",
   },
 ];
 
@@ -54,6 +54,12 @@ function EngineIcon({ engineId }: { engineId: string }) {
           <path d="M12 0a12 12 0 0 0-4.37 23.17c-.1-.94-.2-2.4.04-3.44l1.4-5.96s-.36-.72-.36-1.78c0-1.66.97-2.9 2.17-2.9 1.02 0 1.52.77 1.52 1.7 0 1.03-.66 2.58-.99 4.01-.28 1.2.6 2.17 1.78 2.17 2.13 0 3.77-2.25 3.77-5.5 0-2.87-2.06-4.88-5.01-4.88-3.41 0-5.42 2.56-5.42 5.21 0 1.03.4 2.14.89 2.74a.36.36 0 0 1 .08.34l-.33 1.36c-.05.22-.18.27-.4.16-1.5-.7-2.44-2.9-2.44-4.67 0-3.8 2.76-7.3 7.96-7.3 4.18 0 7.43 2.98 7.43 6.96 0 4.15-2.62 7.5-6.25 7.5-1.22 0-2.37-.63-2.76-1.38l-.75 2.87c-.27 1.05-1.01 2.37-1.5 3.17A12 12 0 1 0 12 0z" />
         </svg>
       );
+    case "linkedin":
+      return (
+        <svg className={cls} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M4.98 3.5A2.49 2.49 0 1 1 0 3.5a2.49 2.49 0 0 1 4.98 0ZM.48 8.35h4V24h-4V8.35Zm6.22 0h3.83v2.14h.05c.53-1.01 1.84-2.08 3.79-2.08 4.05 0 4.8 2.67 4.8 6.15V24h-3.99v-7.72c0-1.84-.03-4.21-2.57-4.21-2.57 0-2.97 2-2.97 4.08V24H6.7V8.35Z" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -85,9 +91,9 @@ export default function HomeRoute() {
             </span>
           </h1>
           <p className="m-0 max-w-[36rem] text-fg-muted text-[1.05rem] leading-[1.7]">
-            Read-only access to Meta, Google, TikTok, and Pinterest through one CLI. Built
-            for agents like Claude Code to safely query campaign insights
-            across multiple platforms.
+            Read-only access to Meta, Google, TikTok, Pinterest, and LinkedIn through one CLI.
+            Built for agents like Claude Code to safely query campaign insights across
+            multiple platforms.
           </p>
         </div>
 
@@ -163,6 +169,8 @@ export default function HomeRoute() {
                       ? "\u2665"
                       : card.category.includes("Google")
                         ? "\u2315"
+                        : card.category.includes("LinkedIn")
+                          ? "in"
                         : "\u2913"}
                 </span>
               </div>

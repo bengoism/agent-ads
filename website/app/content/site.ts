@@ -40,6 +40,7 @@ export const sidebarNav = {
       { to: "/engines/google", label: "Google Ads" },
       { to: "/engines/tiktok", label: "TikTok" },
       { to: "/engines/pinterest", label: "Pinterest" },
+      { to: "/engines/linkedin", label: "LinkedIn" },
     ],
   },
 } as const;
@@ -49,7 +50,7 @@ export const headerLinks = [
   { href: repoLinks.npm, label: "NPM" },
 ] as const;
 
-export const engineOrder: EngineId[] = ["meta", "google", "tiktok", "pinterest"];
+export const engineOrder: EngineId[] = ["meta", "google", "tiktok", "pinterest", "linkedin"];
 
 export const engines: Record<EngineId, EngineMeta> = {
   meta: {
@@ -125,6 +126,24 @@ export const engines: Record<EngineId, EngineMeta> = {
       { label: "Best for", value: "Analytics, report runs, audiences" },
     ],
   },
+  linkedin: {
+    id: "linkedin",
+    name: "LinkedIn",
+    eyebrow: "Marketing API",
+    description:
+      "Ad accounts, campaign groups, campaigns, creatives, and adAnalytics reporting for LinkedIn Marketing API.",
+    firstCommand: "agent-ads linkedin ad-accounts list",
+    tags: ["Reporting", "Creatives", "Campaign groups"],
+    quickStartLead:
+      "Use LinkedIn for ad account discovery, campaign hierarchy inspection, creative lookup, and adAnalytics reporting.",
+    referenceLead:
+      "Auth, account discovery, campaign groups, campaigns, creatives, reporting, and config checks for LinkedIn.",
+    stats: [
+      { label: "Auth", value: "Access token" },
+      { label: "Scope", value: "Ad account IDs" },
+      { label: "Best for", value: "B2B reporting and creative audits" },
+    ],
+  },
 };
 
 export const homeCLIExamples = [
@@ -156,6 +175,13 @@ export const homeCLIExamples = [
     command:
       "$ agent-ads pinterest targeting-analytics query \\\n  --ad-account-id 549764106178 \\\n  --targeting-type GENDER,AGE_BUCKET \\\n  --columns SPEND,CLICKTHROUGH_1",
   },
+  {
+    id: "linkedin-analytics",
+    engine: "LinkedIn",
+    label: "Daily campaign clicks and spend",
+    command:
+      "$ agent-ads linkedin analytics query \\\n  --finder statistics \\\n  --account-id 1234567890 \\\n  --pivot CAMPAIGN \\\n  --time-granularity DAILY \\\n  --since 2026-03-01 \\\n  --until 2026-03-16 \\\n  --fields impressions,clicks,costInLocalCurrency",
+  },
 ] as const;
 
 export const homePromptCards = [
@@ -186,6 +212,13 @@ export const homePromptCards = [
     prompt: "How are my Pinterest conversions trending this week?",
     command:
       "$ agent-ads pinterest analytics query \\\n  --ad-account-id 549764106178 \\\n  --columns TOTAL_CONVERSIONS,TOTAL_PAGE_VISIT \\\n  --start-date 2026-03-15 --end-date 2026-03-22",
+  },
+  {
+    id: "linkedin-reporting",
+    category: "LinkedIn Reporting",
+    prompt: "Show daily LinkedIn campaign clicks and spend for last week",
+    command:
+      "$ agent-ads linkedin analytics query \\\n  --finder statistics \\\n  --account-id 1234567890 \\\n  --pivot CAMPAIGN \\\n  --time-granularity DAILY \\\n  --since 2026-03-15 \\\n  --until 2026-03-22 \\\n  --fields impressions,clicks,costInLocalCurrency",
   },
 ] as const;
 

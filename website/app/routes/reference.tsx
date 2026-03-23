@@ -15,7 +15,7 @@ export const meta = () => [
   {
     name: "description",
     content:
-      "Full command reference for Meta, Google Ads, TikTok, and Pinterest, with engine guides and workflow docs.",
+      "Full command reference for Meta, Google Ads, TikTok, Pinterest, and LinkedIn, with engine guides and workflow docs.",
   },
 ];
 
@@ -31,7 +31,7 @@ export default function ReferenceRoute() {
               <span className="text-fg/78"> for every engine.</span>
             </>
           }
-          lede="Browse the engine guides for Meta, Google Ads, TikTok, and Pinterest when you need exact flags, auth requirements, or deeper workflow examples."
+          lede="Browse the engine guides for Meta, Google Ads, TikTok, Pinterest, and LinkedIn when you need exact flags, auth requirements, or deeper workflow examples."
           detail={`${engineOrder.reduce((c, id) => c + generatedContent.references[id].length, 0)} guides`}
           actions={
             <>

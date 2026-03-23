@@ -2,7 +2,7 @@ import { CommandPanel, SectionHeader } from "../components/docs";
 
 export const meta = () => [
   { title: "Auth | agent-ads" },
-  { name: "description", content: "Authentication setup for Meta, Google Ads, TikTok, and Pinterest." },
+  { name: "description", content: "Authentication setup for Meta, Google Ads, TikTok, Pinterest, and LinkedIn." },
 ];
 
 export default function AuthRoute() {
@@ -101,6 +101,28 @@ export default function AuthRoute() {
           title="Refresh an expired token"
           command="agent-ads pinterest auth refresh"
           copyKey="pinterest-auth-refresh"
+        />
+      </section>
+
+      <section className="grid gap-6">
+        <SectionHeader
+          eyebrow="LinkedIn"
+          title="LinkedIn Authentication"
+          copy="LinkedIn uses an access token only. Store it in the OS credential store or override it from the shell for one-off sessions."
+        />
+        <CommandPanel
+          compact
+          eyebrow="Store token"
+          title="Guided auth setup"
+          command="agent-ads linkedin auth set"
+          copyKey="linkedin-auth-set"
+        />
+        <CommandPanel
+          compact
+          eyebrow="Environment override"
+          title="One-off session token"
+          command="export LINKEDIN_ADS_ACCESS_TOKEN=access-token"
+          copyKey="linkedin-auth-env"
         />
       </section>
     </>
