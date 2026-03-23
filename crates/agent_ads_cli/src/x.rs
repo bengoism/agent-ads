@@ -628,8 +628,12 @@ pub struct AccountAppGetArgs {
 pub struct AccountMediaListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
-    #[arg(long = "media-key", value_delimiter = ',', help = "Filter media keys")]
-    pub media_keys: Vec<String>,
+    #[arg(
+        long = "account-media-id",
+        value_delimiter = ',',
+        help = "Filter account media IDs"
+    )]
+    pub account_media_ids: Vec<String>,
     #[command(flatten)]
     pub collection: XCollectionArgs,
 }
@@ -638,16 +642,21 @@ pub struct AccountMediaListArgs {
 pub struct AccountMediaGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
-    #[arg(long = "media-key", help = "Account media key")]
-    pub media_key: String,
+    #[arg(long = "account-media-id", help = "Account media ID")]
+    pub account_media_id: String,
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct MediaLibraryListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
-    #[arg(long = "media-key", value_delimiter = ',', help = "Filter media keys")]
-    pub media_keys: Vec<String>,
+    #[arg(long = "media-type", help = "Filter by media type")]
+    pub media_type: Option<String>,
+    #[arg(
+        long = "query",
+        help = "Search by name, title, file name, or description"
+    )]
+    pub query: Option<String>,
     #[command(flatten)]
     pub collection: XCollectionArgs,
 }
@@ -664,6 +673,8 @@ pub struct MediaLibraryGetArgs {
 pub struct CardListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[arg(long = "card-id", value_delimiter = ',', help = "Filter card IDs")]
+    pub card_ids: Vec<String>,
     #[arg(long = "card-uri", value_delimiter = ',', help = "Filter card URIs")]
     pub card_uris: Vec<String>,
     #[command(flatten)]
@@ -674,16 +685,16 @@ pub struct CardListArgs {
 pub struct CardGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
-    #[arg(long = "card-uri", help = "Card URI")]
-    pub card_uri: String,
+    #[arg(long = "card-id", help = "Card ID")]
+    pub card_id: String,
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct DraftTweetListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
-    #[arg(long = "tweet-id", value_delimiter = ',', help = "Filter tweet IDs")]
-    pub tweet_ids: Vec<String>,
+    #[arg(long = "user-id", help = "Retrieve draft tweets for a specific user")]
+    pub user_id: Option<String>,
     #[command(flatten)]
     pub collection: XCollectionArgs,
 }
@@ -692,8 +703,8 @@ pub struct DraftTweetListArgs {
 pub struct DraftTweetGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
-    #[arg(long = "tweet-id", help = "Draft tweet ID")]
-    pub tweet_id: String,
+    #[arg(long = "draft-tweet-id", help = "Draft tweet ID")]
+    pub draft_tweet_id: String,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -701,11 +712,10 @@ pub struct ScheduledTweetListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
     #[arg(
-        long = "scheduled-tweet-id",
-        value_delimiter = ',',
-        help = "Filter scheduled tweet IDs"
+        long = "user-id",
+        help = "Retrieve scheduled tweets for a specific user"
     )]
-    pub scheduled_tweet_ids: Vec<String>,
+    pub user_id: Option<String>,
     #[command(flatten)]
     pub collection: XCollectionArgs,
 }
@@ -1624,7 +1634,7 @@ pub async fn dispatch_x_with_client(
                     "account_media",
                     "/x/account-media/list",
                     &args.collection,
-                    &[("media_keys", &args.media_keys)],
+                    &[("account_media_ids", &args.account_media_ids)],
                 )
                 .await
             }
@@ -1634,7 +1644,7 @@ pub async fn dispatch_x_with_client(
                     config,
                     args.selector.account_id.as_deref(),
                     "account_media",
-                    &args.media_key,
+                    &args.account_media_id,
                     "/x/account-media/get",
                 )
                 .await
@@ -1642,16 +1652,31 @@ pub async fn dispatch_x_with_client(
         },
         XCommand::MediaLibrary { command } => match command {
             MediaLibraryCommand::List(args) => {
-                list_account_resource(
+                let account_id = resolve_account_id(config, args.selector.account_id.as_deref())?;
+                let mut params = collection_params(&args.collection);
+                if let Some(media_type) = args.media_type.as_deref() {
+                    params.push(("media_type".to_string(), media_type.to_string()));
+                }
+                if let Some(query) = args.query.as_deref() {
+                    params.push(("q".to_string(), query.to_string()));
+                }
+
+                let response = account_scoped::list_resource(
                     client,
-                    config,
-                    args.selector.account_id.as_deref(),
+                    &account_id,
                     "media_library",
-                    "/x/media-library/list",
-                    &args.collection,
-                    &[("media_keys", &args.media_keys)],
+                    &params,
+                    args.collection.pagination.all,
+                    args.collection.pagination.max_items,
                 )
-                .await
+                .await?;
+                Ok(x_result(
+                    client,
+                    response,
+                    "/x/media-library/list",
+                    Some(account_id),
+                    vec![],
+                ))
             }
             MediaLibraryCommand::Get(args) => {
                 get_account_resource(
@@ -1674,7 +1699,7 @@ pub async fn dispatch_x_with_client(
                     "cards",
                     "/x/cards/list",
                     &args.collection,
-                    &[("card_uris", &args.card_uris)],
+                    &[("card_ids", &args.card_ids), ("card_uris", &args.card_uris)],
                 )
                 .await
             }
@@ -1684,7 +1709,7 @@ pub async fn dispatch_x_with_client(
                     config,
                     args.selector.account_id.as_deref(),
                     "cards",
-                    &args.card_uri,
+                    &args.card_id,
                     "/x/cards/get",
                 )
                 .await
@@ -1692,16 +1717,28 @@ pub async fn dispatch_x_with_client(
         },
         XCommand::DraftTweets { command } => match command {
             DraftTweetsCommand::List(args) => {
-                list_account_resource(
+                let account_id = resolve_account_id(config, args.selector.account_id.as_deref())?;
+                let mut params = collection_params(&args.collection);
+                if let Some(user_id) = args.user_id.as_deref() {
+                    params.push(("user_id".to_string(), user_id.to_string()));
+                }
+
+                let response = account_scoped::list_resource(
                     client,
-                    config,
-                    args.selector.account_id.as_deref(),
+                    &account_id,
                     "draft_tweets",
-                    "/x/draft-tweets/list",
-                    &args.collection,
-                    &[("tweet_ids", &args.tweet_ids)],
+                    &params,
+                    args.collection.pagination.all,
+                    args.collection.pagination.max_items,
                 )
-                .await
+                .await?;
+                Ok(x_result(
+                    client,
+                    response,
+                    "/x/draft-tweets/list",
+                    Some(account_id),
+                    vec![],
+                ))
             }
             DraftTweetsCommand::Get(args) => {
                 get_account_resource(
@@ -1709,7 +1746,7 @@ pub async fn dispatch_x_with_client(
                     config,
                     args.selector.account_id.as_deref(),
                     "draft_tweets",
-                    &args.tweet_id,
+                    &args.draft_tweet_id,
                     "/x/draft-tweets/get",
                 )
                 .await
@@ -1717,16 +1754,28 @@ pub async fn dispatch_x_with_client(
         },
         XCommand::ScheduledTweets { command } => match command {
             ScheduledTweetsCommand::List(args) => {
-                list_account_resource(
+                let account_id = resolve_account_id(config, args.selector.account_id.as_deref())?;
+                let mut params = collection_params(&args.collection);
+                if let Some(user_id) = args.user_id.as_deref() {
+                    params.push(("user_id".to_string(), user_id.to_string()));
+                }
+
+                let response = account_scoped::list_resource(
                     client,
-                    config,
-                    args.selector.account_id.as_deref(),
+                    &account_id,
                     "scheduled_tweets",
-                    "/x/scheduled-tweets/list",
-                    &args.collection,
-                    &[("scheduled_tweet_ids", &args.scheduled_tweet_ids)],
+                    &params,
+                    args.collection.pagination.all,
+                    args.collection.pagination.max_items,
                 )
-                .await
+                .await?;
+                Ok(x_result(
+                    client,
+                    response,
+                    "/x/scheduled-tweets/list",
+                    Some(account_id),
+                    vec![],
+                ))
             }
             ScheduledTweetsCommand::Get(args) => {
                 get_account_resource(

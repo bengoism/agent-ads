@@ -2615,6 +2615,7 @@ mod tests {
         assert!(help.contains("tiktok"));
         assert!(help.contains("pinterest"));
         assert!(help.contains("linkedin"));
+        assert!(help.contains("x"));
     }
 
     #[test]
@@ -3499,5 +3500,48 @@ mod tests {
         .unwrap();
 
         assert_eq!(format, OutputFormat::Csv);
+    }
+
+    #[test]
+    fn x_help_lists_command_topics() {
+        let help = nested_help(&["x"]);
+        assert!(help.contains("accounts"));
+        assert!(help.contains("campaigns"));
+        assert!(help.contains("promoted-tweets"));
+        assert!(help.contains("analytics"));
+        assert!(help.contains("auth"));
+        assert!(help.contains("doctor"));
+        assert!(help.contains("config"));
+    }
+
+    #[test]
+    fn x_help_uses_documented_resource_identifiers() {
+        let account_media_get_help = nested_help(&["x", "account-media", "get"]);
+        assert!(account_media_get_help.contains("--account-media-id"));
+        assert!(!account_media_get_help.contains("--media-key"));
+
+        let cards_get_help = nested_help(&["x", "cards", "get"]);
+        assert!(cards_get_help.contains("--card-id"));
+        assert!(!cards_get_help.contains("--card-uri"));
+
+        let draft_tweets_get_help = nested_help(&["x", "draft-tweets", "get"]);
+        assert!(draft_tweets_get_help.contains("--draft-tweet-id"));
+        assert!(!draft_tweets_get_help.contains("--tweet-id"));
+    }
+
+    #[test]
+    fn x_list_help_uses_supported_filters() {
+        let media_library_list_help = nested_help(&["x", "media-library", "list"]);
+        assert!(media_library_list_help.contains("--media-type"));
+        assert!(media_library_list_help.contains("--query"));
+        assert!(!media_library_list_help.contains("--media-key"));
+
+        let draft_tweets_list_help = nested_help(&["x", "draft-tweets", "list"]);
+        assert!(draft_tweets_list_help.contains("--user-id"));
+        assert!(!draft_tweets_list_help.contains("--tweet-id"));
+
+        let scheduled_tweets_list_help = nested_help(&["x", "scheduled-tweets", "list"]);
+        assert!(scheduled_tweets_list_help.contains("--user-id"));
+        assert!(!scheduled_tweets_list_help.contains("--scheduled-tweet-id"));
     }
 }
