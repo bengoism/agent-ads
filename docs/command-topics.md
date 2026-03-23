@@ -29,6 +29,7 @@ Commands:
   tiktok     TikTok Business API commands
   pinterest  Pinterest Ads API commands
   linkedin   LinkedIn Marketing API commands
+  x          X Ads API commands
   help       Print this message or the help of the given subcommand(s)
 
 Options:
@@ -56,7 +57,7 @@ agent-ads providers list
 ```
 
 ```json
-[{"implemented":true,"provider":"meta","status":"available","summary":"Read-only Meta Marketing API support."},{"implemented":true,"provider":"google","status":"available","summary":"Read-only Google Ads support with native GAQL."},{"implemented":true,"provider":"tiktok","status":"available","summary":"Read-only TikTok Business API support."},{"implemented":true,"provider":"pinterest","status":"available","summary":"Read-only Pinterest Ads API support."},{"implemented":true,"provider":"linkedin","status":"available","summary":"Read-only LinkedIn Marketing API support."}]
+[{"implemented":true,"provider":"meta","status":"available","summary":"Read-only Meta Marketing API support."},{"implemented":true,"provider":"google","status":"available","summary":"Read-only Google Ads support with native GAQL."},{"implemented":true,"provider":"tiktok","status":"available","summary":"Read-only TikTok Business API support."},{"implemented":true,"provider":"pinterest","status":"available","summary":"Read-only Pinterest Ads API support."},{"implemented":true,"provider":"linkedin","status":"available","summary":"Read-only LinkedIn Marketing API support."},{"implemented":true,"provider":"x","status":"available","summary":"Read-only X Ads API support."}]
 ```
 
 ## Root Auth
@@ -1208,6 +1209,283 @@ agent-ads linkedin config --help
 Inspect and validate configuration
 
 Usage: agent-ads linkedin config [OPTIONS] <COMMAND>
+
+Commands:
+  path      Show resolved config file path
+  show      Show full resolved configuration
+  validate  Validate config file
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## X Topic
+
+The X provider covers the read-only X Ads API surface.
+
+```bash
+agent-ads x --help
+```
+
+```text
+X Ads API commands
+
+Usage: agent-ads x [OPTIONS] <COMMAND>
+
+Commands:
+  accounts                   List and inspect X ads accounts
+  authenticated-user-access  Inspect the authenticated user's access to an X ads account
+  campaigns                  List and inspect campaigns
+  line-items                 List and inspect line items
+  funding-instruments        List and inspect funding instruments
+  promotable-users           List and inspect promotable users
+  promoted-accounts          List and inspect promoted accounts
+  promoted-tweets            List and inspect promoted tweets
+  targeting-criteria         List and inspect targeting criteria
+  account-apps               List and inspect account apps
+  account-media              List and inspect account media
+  media-library              List and inspect media library assets
+  cards                      List and inspect cards
+  draft-tweets               List and inspect draft tweets
+  scheduled-tweets           List and inspect scheduled tweets
+  scoped-timeline            List promoted-only tweets in the scoped timeline
+  custom-audiences           List and inspect custom audiences
+  do-not-reach-lists         List and inspect do-not-reach lists
+  web-event-tags             List and inspect web event tags
+  app-lists                  List and inspect app lists
+  ab-tests                   List and inspect AB tests
+  analytics                  Query X Ads analytics endpoints
+  auth                       Manage stored X Ads credentials
+  doctor                     Verify auth, config, and API connectivity
+  config                     Inspect and validate configuration
+  help                       Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## X Accounts
+
+```bash
+agent-ads x accounts --help
+```
+
+```text
+List and inspect X ads accounts
+
+Usage: agent-ads x accounts [OPTIONS] <COMMAND>
+
+Commands:
+  list  List accessible X ads accounts [aliases: ls]
+  get   Get a single X ads account [aliases: cat]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## X Campaigns
+
+```bash
+agent-ads x campaigns --help
+```
+
+```text
+List and inspect campaigns
+
+Usage: agent-ads x campaigns [OPTIONS] <COMMAND>
+
+Commands:
+  list  List campaigns for an ads account [aliases: ls]
+  get   Get a single campaign [aliases: cat]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## X Line Items
+
+```bash
+agent-ads x line-items --help
+```
+
+```text
+List and inspect line items
+
+Usage: agent-ads x line-items [OPTIONS] <COMMAND>
+
+Commands:
+  list  List line items for an ads account [aliases: ls]
+  get   Get a single line item [aliases: cat]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## X Promoted Tweets
+
+```bash
+agent-ads x promoted-tweets --help
+```
+
+```text
+List and inspect promoted tweets
+
+Usage: agent-ads x promoted-tweets [OPTIONS] <COMMAND>
+
+Commands:
+  list  List promoted tweets for an ads account [aliases: ls]
+  get   Get a single promoted tweet [aliases: cat]
+  help  Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## X Analytics
+
+```bash
+agent-ads x analytics --help
+```
+
+```text
+Query X Ads analytics endpoints
+
+Usage: agent-ads x analytics [OPTIONS] <COMMAND>
+
+Commands:
+  query            Run a synchronous analytics query
+  reach            Run a reach and average-frequency query
+  active-entities  List active entities for analytics syncs
+  jobs             Manage async analytics jobs
+  help             Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## X Auth
+
+```bash
+agent-ads x auth --help
+```
+
+```text
+Manage stored X Ads credentials
+
+Usage: agent-ads x auth [OPTIONS] <COMMAND>
+
+Commands:
+  set     Store X Ads credentials in the OS credential store
+  status  Show auth source and secure storage status
+  delete  Delete stored X Ads credentials
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>                    Config file path [default: agent-ads.config.json]
+      --api-base-url <API_BASE_URL>        Override API base URL
+      --api-version <API_VERSION>          Override API version (e.g. Meta v25.0 or Google v23)
+      --timeout-seconds <TIMEOUT_SECONDS>  HTTP request timeout in seconds
+      --format <FORMAT>                    Output format [possible values: json, jsonl, csv]
+      --output <OUTPUT>                    Write output to file (- for stdout)
+      --pretty                             Pretty-print JSON output
+      --envelope                           Include response metadata, paging, and warnings
+      --include-meta                       Add metadata columns to CSV output
+  -q, --quiet                              Suppress warnings and non-data output
+  -v, --verbose...                         Increase log verbosity (-v info, -vv debug)
+  -h, --help                               Print help
+```
+
+## X Config
+
+```bash
+agent-ads x config --help
+```
+
+```text
+Inspect and validate configuration
+
+Usage: agent-ads x config [OPTIONS] <COMMAND>
 
 Commands:
   path      Show resolved config file path

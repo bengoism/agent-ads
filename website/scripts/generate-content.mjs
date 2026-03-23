@@ -29,6 +29,14 @@ const providerReferenceFiles = {
   ],
   pinterest: ["pinterest.md"],
   linkedin: ["linkedin.md"],
+  x: [
+    "x.md",
+    "x-auth-and-config.md",
+    "x-campaign-management.md",
+    "x-creatives.md",
+    "x-audiences-and-measurement.md",
+    "x-analytics.md",
+  ],
 };
 
 function slugify(value) {
@@ -149,6 +157,7 @@ async function buildQuickStarts() {
     tiktok: parseQuickStart(readme, "TikTok"),
     pinterest: parseQuickStart(readme, "Pinterest"),
     linkedin: parseQuickStart(readme, "LinkedIn"),
+    x: parseQuickStart(readme, "X"),
   };
 }
 

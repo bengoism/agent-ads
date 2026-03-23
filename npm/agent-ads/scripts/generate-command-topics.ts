@@ -216,6 +216,47 @@ const sections: Section[] = [
     language: "text"
   },
   {
+    title: "X Topic",
+    intro: "The X provider covers the read-only X Ads API surface.",
+    args: ["x", "--help"],
+    language: "text"
+  },
+  {
+    title: "X Accounts",
+    args: ["x", "accounts", "--help"],
+    language: "text"
+  },
+  {
+    title: "X Campaigns",
+    args: ["x", "campaigns", "--help"],
+    language: "text"
+  },
+  {
+    title: "X Line Items",
+    args: ["x", "line-items", "--help"],
+    language: "text"
+  },
+  {
+    title: "X Promoted Tweets",
+    args: ["x", "promoted-tweets", "--help"],
+    language: "text"
+  },
+  {
+    title: "X Analytics",
+    args: ["x", "analytics", "--help"],
+    language: "text"
+  },
+  {
+    title: "X Auth",
+    args: ["x", "auth", "--help"],
+    language: "text"
+  },
+  {
+    title: "X Config",
+    args: ["x", "config", "--help"],
+    language: "text"
+  },
+  {
     title: "Google Topic",
     intro: "The Google provider covers read-only Google Ads and native GAQL access.",
     args: ["google", "--help"],

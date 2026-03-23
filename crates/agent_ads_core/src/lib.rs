@@ -25,12 +25,16 @@ pub mod tiktok_client;
 pub mod tiktok_config;
 pub mod tiktok_endpoints;
 pub mod tiktok_error;
+pub mod x_client;
+pub mod x_config;
+pub mod x_endpoints;
+pub mod x_error;
 
 pub use auth_bundle::{
     auth_bundle_error_is_recoverable, load_auth_bundle, lock_auth_bundle, mutate_auth_bundle,
     prepare_auth_bundle_for_update, store_auth_bundle, AuthBundle, AuthBundleLockGuard,
     AuthBundleMutationOutcome, GoogleAuthBundle, LinkedInAuthBundle, MetaAuthBundle,
-    PinterestAuthBundle, TikTokAuthBundle, AUTH_BUNDLE_VERSION,
+    PinterestAuthBundle, TikTokAuthBundle, XAuthBundle, AUTH_BUNDLE_VERSION,
 };
 pub use client::{GraphClient, GraphResponse, Paging, PagingCursors};
 pub use config::{
@@ -94,3 +98,11 @@ pub use tiktok_config::{
     TIKTOK_DEFAULT_API_BASE_URL, TIKTOK_DEFAULT_API_VERSION,
 };
 pub use tiktok_error::{TikTokApiError, TikTokError, TikTokResult};
+pub use x_client::{XClient, XResponse};
+pub use x_config::{
+    x_inspect, x_inspect_auth, XAuthSnapshot, XConfigOverrides, XConfigSnapshot, XFileConfig,
+    XResolvedConfig, XSecretSource, XSecretStatus, X_ADS_ACCESS_TOKEN_ENV_VAR,
+    X_ADS_ACCESS_TOKEN_SECRET_ENV_VAR, X_ADS_CONSUMER_KEY_ENV_VAR, X_ADS_CONSUMER_SECRET_ENV_VAR,
+    X_DEFAULT_API_BASE_URL, X_DEFAULT_API_VERSION,
+};
+pub use x_error::{parse_x_api_error, XApiError, XError, XResult};
