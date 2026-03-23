@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "agent_ads_cli"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "agent_ads_core",
  "clap",
@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "agent_ads_core"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "csv",
  "keyring",
