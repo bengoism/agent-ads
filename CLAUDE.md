@@ -50,6 +50,17 @@ npm run docs:generate          # regenerate docs/command-topics.md from CLI help
 5. Update the relevant reference doc in `skills/agent-ads/references/`
 6. Run `npm run docs:generate` to update the generated CLI reference
 
+## Releasing
+
+Releases are handled by the **Release** GitHub Action (`.github/workflows/release.yml`). To publish a new version:
+
+1. Bump the version in `npm/agent-ads/package.json` (e.g. `npm version patch` from that directory)
+2. Commit the version bump to `main`
+3. Tag the commit: `git tag v<version>`
+4. Push the commit and tag: `git push && git push origin v<version>`
+
+The workflow builds native binaries for all platforms, then publishes all npm packages. Do not publish manually with `npm publish`.
+
 ## Testing
 
 - `cargo test` runs unit tests (clap arg parsing, help rendering)
