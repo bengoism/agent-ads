@@ -194,14 +194,7 @@ async function buildSkillsContent() {
   const preamble = skillBody.split(/^##\s+/m)[0];
   const description = firstParagraph(preamble);
 
-  const sectionNames = [
-    "Common Tasks",
-    "Command Syntax Rules",
-    "Provider Routing",
-    "Shared Behavior",
-    "Common Issues",
-    "Stop Conditions",
-  ];
+  const sectionNames = ["Common Tasks"];
 
   return {
     description,

@@ -43,7 +43,7 @@ export const meta = () => [
 ];
 
 export default function SkillsRoute() {
-  const [commonTasks, ...remainingSections] = generatedContent.skills.sections;
+  const [commonTasks] = generatedContent.skills.sections;
 
   return (
     <>
@@ -93,16 +93,6 @@ export default function SkillsRoute() {
         </article>
       </section>
 
-      {remainingSections.map((section) => (
-        <section key={section.id} id={section.id} className="grid gap-6">
-          <SectionHeader eyebrow="Guide" title={section.title} copy={section.summary} />
-          <article
-            className="grid gap-5 relative overflow-hidden p-[1.2rem] rounded bg-gradient-to-b from-[rgba(32,31,32,0.96)] to-[rgba(16,16,17,0.98)] shadow-ambient"
-          >
-            <MarkdownBlock markdown={section.markdown} resolveHref={resolveSkillHref} />
-          </article>
-        </section>
-      ))}
     </>
   );
 }
