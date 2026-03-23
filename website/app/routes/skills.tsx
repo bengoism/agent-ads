@@ -54,7 +54,7 @@ export default function SkillsRoute() {
           copy="Install the public skill if you use Codex or Claude Code with agent-ads. It gives the agent a simple playbook for checking providers, checking auth, and using the real commands."
         />
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <CommandPanel
             eyebrow="Install"
             title="Add the public skill"
