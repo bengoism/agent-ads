@@ -1,6 +1,6 @@
 {
   "name": "agent-ads",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "CLI launcher for the multi-provider agent-ads Rust binary",
   "author": "bengoism",
   "license": "MIT",
@@ -24,11 +24,11 @@
     "scripts"
   ],
   "optionalDependencies": {
-    "agent-ads-darwin-arm64": "0.7.2",
-    "agent-ads-darwin-x64": "0.7.2",
-    "agent-ads-linux-arm64-gnu": "0.7.2",
-    "agent-ads-linux-x64-gnu": "0.7.2",
-    "agent-ads-windows-x64-msvc": "0.7.2"
+    "agent-ads-darwin-arm64": "0.8.0",
+    "agent-ads-darwin-x64": "0.8.0",
+    "agent-ads-linux-arm64-gnu": "0.8.0",
+    "agent-ads-linux-x64-gnu": "0.8.0",
+    "agent-ads-windows-x64-msvc": "0.8.0"
   },
   "publishConfig": {
     "provenance": true

@@ -1,6 +1,6 @@
 {
   "name": "agent-ads-darwin-x64",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "Darwin x64 binary for the agent-ads CLI",
   "author": "bengoism",
   "os": [
