@@ -20,7 +20,7 @@ export const meta = () => [
   {
     name: "description",
     content:
-      "Read-only CLI for Meta, Google, TikTok, Pinterest, and LinkedIn ad APIs. JSON to stdout. Built in Rust. Works with Claude Code.",
+      "Read-only CLI for Meta, Google, TikTok, Pinterest, LinkedIn, and X ad APIs. JSON to stdout. Built in Rust. Works with Claude Code.",
   },
 ];
 
@@ -60,6 +60,12 @@ function EngineIcon({ engineId }: { engineId: string }) {
           <path d="M4.98 3.5A2.49 2.49 0 1 1 0 3.5a2.49 2.49 0 0 1 4.98 0ZM.48 8.35h4V24h-4V8.35Zm6.22 0h3.83v2.14h.05c.53-1.01 1.84-2.08 3.79-2.08 4.05 0 4.8 2.67 4.8 6.15V24h-3.99v-7.72c0-1.84-.03-4.21-2.57-4.21-2.57 0-2.97 2-2.97 4.08V24H6.7V8.35Z" />
         </svg>
       );
+    case "x":
+      return (
+        <svg className={cls} viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+          <path d="M214.75 211.71 152.15 113.33l61.77-67.95a8 8 0 0 0-11.84-10.76l-58.84 64.72-40.49-63.63A8 8 0 0 0 96 32H48a8 8 0 0 0-6.75 12.3l62.6 98.37-61.77 68a8 8 0 1 0 11.84 10.76l58.84-64.72 40.49 63.63A8 8 0 0 0 160 224h48a8 8 0 0 0 6.75-12.29ZM164.39 208 62.57 48h29L193.43 208Z" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -91,8 +97,8 @@ export default function HomeRoute() {
             </span>
           </h1>
           <p className="m-0 max-w-[36rem] text-fg-muted text-[1.05rem] leading-[1.7]">
-            Read-only access to Meta, Google, TikTok, Pinterest, and LinkedIn through one CLI.
-            Built for agents like Claude Code to safely query campaign insights across
+            Read-only access to Meta, Google, TikTok, Pinterest, LinkedIn, and X through one
+            CLI. Built for agents like Claude Code to safely query campaign insights across
             multiple platforms.
           </p>
         </div>
