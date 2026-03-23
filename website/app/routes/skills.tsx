@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { generatedContent } from "../generated/content";
-import { engineOrder, skillStartCommands } from "../content/site";
+import { engineOrder, skillInstallCommand, skillStartCommands } from "../content/site";
 import {
   btnPrimary,
   btnSecondary,
@@ -54,12 +54,12 @@ export default function SkillsRoute() {
         eyebrow="Skill"
         title={
           <>
-            Keep provider
-            <span className="text-fg/78"> routing explicit.</span>
+            Install the skill.
+            <span className="text-fg/78"> Keep provider routing explicit.</span>
           </>
         }
         lede={generatedContent.skills.description}
-        detail="Operational guide"
+        detail="Public skill"
         actions={
           <>
             <Link className={btnPrimary} to="/reference">
@@ -72,13 +72,36 @@ export default function SkillsRoute() {
         }
         aside={
           <CommandPanel
-            eyebrow="Start here"
+            eyebrow="Install"
+            title="Install the public skill"
+            command={skillInstallCommand}
+            copyKey="skills-install"
+          />
+        }
+      />
+
+      <section id="skill-install" className="grid gap-6">
+        <SectionHeader
+          eyebrow="Setup"
+          title="Install first"
+          copy="Add the public skill, then check providers and auth state before routing into provider-specific commands."
+        />
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <CommandPanel
+            eyebrow="Install"
+            title="Install the public skill"
+            command={skillInstallCommand}
+            copyKey="skills-install-section"
+          />
+          <CommandPanel
+            eyebrow="Then start here"
             title="Inspect providers and auth state"
             command={skillStartCommands}
             copyKey="skills-start"
           />
-        }
-      />
+        </div>
+      </section>
 
       <section id={commonTasks.id} className="grid gap-6">
         <SectionHeader
