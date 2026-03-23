@@ -12,6 +12,7 @@ use crate::output::OutputFormat;
 use crate::pinterest_config::PinterestFileConfig;
 use crate::secret_store::{SecretStore, SecretStoreErrorKind};
 use crate::tiktok_config::TikTokFileConfig;
+use crate::x_config::XFileConfig;
 
 pub const DEFAULT_CONFIG_FILE: &str = "agent-ads.config.json";
 pub const DEFAULT_API_BASE_URL: &str = "https://graph.facebook.com";
@@ -40,6 +41,8 @@ pub struct ProviderFileConfigs {
     pub pinterest: Option<PinterestFileConfig>,
     #[serde(default)]
     pub tiktok: Option<TikTokFileConfig>,
+    #[serde(default)]
+    pub x: Option<XFileConfig>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -1,14 +1,14 @@
 ---
 name: agent-ads
 description: >
-  Read-only CLI for Meta, Google, TikTok, Pinterest, and LinkedIn ad APIs. JSON to stdout.
+  Read-only CLI for Meta, Google, TikTok, Pinterest, LinkedIn, and X ad APIs. JSON to stdout.
   Use when the user wants to query ad platform data — campaign insights, creatives,
   audiences, or account discovery.
 ---
 
 # Agent Ads
 
-`agent-ads` is a read-only CLI for querying ad platform APIs. Meta, Google Ads, TikTok, Pinterest, and LinkedIn supported. Every command outputs JSON to stdout.
+`agent-ads` is a read-only CLI for querying ad platform APIs. Meta, Google Ads, TikTok, Pinterest, LinkedIn, and X supported. Every command outputs JSON to stdout.
 
 ## What You Can Ask
 
@@ -20,6 +20,7 @@ Plain-English prompts that work. The agent translates these into the right CLI c
 - "What's my TikTok campaign performance this month?"
 - "What did my Pinterest campaigns spend last week?"
 - "Show me LinkedIn campaign performance for this month"
+- "Show me X campaign engagement for the last 7 days"
 - "Pull a daily breakdown of impressions and clicks across all campaigns"
 - "Export last week's Meta performance report to CSV"
 - "Run an async report for all my TikTok ads since January"
@@ -31,6 +32,7 @@ Plain-English prompts that work. The agent translates these into the right CLI c
 - "List all my TikTok advertisers"
 - "List my Pinterest ad accounts"
 - "List my LinkedIn ad accounts"
+- "List my X ads accounts"
 - "Show me the campaigns in my Meta ad account"
 - "Which ad sets are running right now?"
 
@@ -40,6 +42,7 @@ Plain-English prompts that work. The agent translates these into the right CLI c
 - "Find broken pixels across my Meta accounts"
 - "What audiences do I have in TikTok?"
 - "What audiences do I have in Pinterest?"
+- "What custom audiences do I have in X?"
 
 **Setup & troubleshooting**
 - "Show me which providers are already authenticated"
@@ -61,9 +64,11 @@ Translating marketer language to CLI concepts:
 | advertiser / ad account | TikTok | `--advertiser-id 123...` flag |
 | ad account | Pinterest | `--ad-account-id 123...` flag |
 | ad account | LinkedIn | `--account-id 123...` flag |
+| ads account | X | `--account-id 18ce...` flag |
 | campaign performance / report | Meta/TikTok | `insights query` command |
 | analytics / report | Pinterest | `analytics query`, `report-runs ...` |
 | analytics / report | LinkedIn | `analytics query --finder ...` |
+| analytics / report | X | `analytics query`, `analytics jobs ...` |
 | GAQL / query | Google | `gaql search`, `gaql search-stream` |
 | pixel / tag | Meta | `pixels list`, `pixel-health get` |
 | pixel | TikTok | `pixels list` |
@@ -91,6 +96,7 @@ Every command starts with `agent-ads <provider>`. This is intentional — each a
 | `tiktok` | Implemented | `agent-ads tiktok --help` | [references/tiktok.md](references/tiktok.md) |
 | `pinterest` | Implemented | `agent-ads pinterest --help` | [references/pinterest.md](references/pinterest.md) |
 | `linkedin` | Implemented | `agent-ads linkedin --help` | [references/linkedin.md](references/linkedin.md) |
+| `x` | Implemented | `agent-ads x --help` | [references/x.md](references/x.md) |
 
 Check live: `agent-ads providers list`
 
@@ -115,7 +121,7 @@ These apply to every provider and every command.
 - Non-secrets: CLI flags > shell env > `agent-ads.config.json`
 - Guided local auth setup: `agent-ads auth`
 - Persistent provider auth: `agent-ads <provider> auth set`
-- Shell override / CI: provider-specific env vars (e.g. `META_ADS_ACCESS_TOKEN`, `GOOGLE_ADS_REFRESH_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `PINTEREST_ADS_REFRESH_TOKEN`, `LINKEDIN_ADS_ACCESS_TOKEN`)
+- Shell override / CI: provider-specific env vars (e.g. `META_ADS_ACCESS_TOKEN`, `GOOGLE_ADS_REFRESH_TOKEN`, `TIKTOK_ADS_ACCESS_TOKEN`, `PINTEREST_ADS_REFRESH_TOKEN`, `LINKEDIN_ADS_ACCESS_TOKEN`, `X_ADS_CONSUMER_KEY`)
 - Linux secure storage requires a running Secret Service provider (GNOME Keyring, KWallet)
 
 ### Exit codes
@@ -130,6 +136,7 @@ These apply to every provider and every command.
 | 5 | Google API error |
 | 6 | Pinterest API error |
 | 7 | LinkedIn API error |
+| 8 | X API error |
 
 ### Global flags
 
@@ -152,13 +159,14 @@ Pagination flags differ by provider — see each provider's routing guide for de
 | Problem | What's happening | Fix |
 |---------|-----------------|-----|
 | "My token expired" | Meta tokens can be short-lived; TikTok tokens expire every 24 hours; Pinterest relies on OAuth refresh tokens | Meta: regenerate at [Graph API Explorer](https://developers.facebook.com/tools/explorer/) then `meta auth set`. TikTok: `tiktok auth refresh --app-id ... --app-secret ...`. Pinterest: `pinterest auth refresh` |
-| "I don't know my account ID" | You need to discover it first | Meta: `meta businesses list` then `meta ad-accounts list --business-id ...`. Google: `google customers list`. TikTok: `tiktok advertisers list --app-id ... --app-secret ...`. Pinterest: `pinterest ad-accounts list` |
+| "I don't know my account ID" | You need to discover it first | Meta: `meta businesses list` then `meta ad-accounts list --business-id ...`. Google: `google customers list`. TikTok: `tiktok advertisers list --app-id ... --app-secret ...`. Pinterest: `pinterest ad-accounts list`. X: `x accounts list` |
 | "Permission denied" | Token is missing required scopes | Meta: regenerate token with `ads_read` (and `business_management` for discovery). TikTok: check app permissions in TikTok developer portal. Pinterest: regenerate app credentials/tokens with the required ads-read scope in the Pinterest developer portal |
 | "Command not found" | CLI not installed or not on PATH | Run `agent-ads --version`. If missing: `npm install -g agent-ads` |
-| "doctor says credential store unavailable" | No OS keychain on this machine (common on Linux servers) | Use shell env vars instead: `export META_ADS_ACCESS_TOKEN=...`, `export GOOGLE_ADS_REFRESH_TOKEN=...`, `export TIKTOK_ADS_ACCESS_TOKEN=...`, `export PINTEREST_ADS_REFRESH_TOKEN=...`, or `export LINKEDIN_ADS_ACCESS_TOKEN=...` |
+| "doctor says credential store unavailable" | No OS keychain on this machine (common on Linux servers) | Use shell env vars instead: `export META_ADS_ACCESS_TOKEN=...`, `export GOOGLE_ADS_REFRESH_TOKEN=...`, `export TIKTOK_ADS_ACCESS_TOKEN=...`, `export PINTEREST_ADS_REFRESH_TOKEN=...`, `export LINKEDIN_ADS_ACCESS_TOKEN=...`, or the four `X_ADS_*` variables |
 | "TikTok says 'advertiser-id is required'" | Most TikTok commands need an advertiser ID | Add `--advertiser-id <id>`, or set `default_advertiser_id` in config under `providers.tiktok` |
 | "Pinterest says 'ad account ID is required'" | Most Pinterest commands are scoped to an ad account | Add `--ad-account-id <id>`, or set `default_ad_account_id` in config under `providers.pinterest` |
 | "LinkedIn says 'account ID is required'" | Most LinkedIn commands are scoped to an ad account | Add `--account-id <id>`, or set `default_account_id` in config under `providers.linkedin` |
+| "X says 'account ID is required'" | Most X commands are scoped to one ads account | Add `--account-id <id>`, or set `default_account_id` in config under `providers.x` |
 
 ## Stop Conditions
 

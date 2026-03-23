@@ -3,6 +3,7 @@ mod linkedin;
 mod meta;
 mod pinterest;
 mod tiktok;
+mod x;
 
 use std::collections::BTreeMap;
 use std::env;
@@ -24,13 +25,16 @@ use agent_ads_core::pinterest_config::PinterestConfigOverrides;
 use agent_ads_core::pinterest_error::{PinterestApiError, PinterestError};
 use agent_ads_core::tiktok_config::TikTokConfigOverrides;
 use agent_ads_core::tiktok_error::{TikTokApiError, TikTokError};
+use agent_ads_core::x_config::XConfigOverrides;
+use agent_ads_core::x_error::{XApiError, XError};
 use agent_ads_core::{
     google_inspect, linkedin_inspect, load_auth_bundle, lock_auth_bundle, pinterest_inspect,
-    prepare_auth_bundle_for_update, store_auth_bundle, tiktok_inspect, AuthBundle,
+    prepare_auth_bundle_for_update, store_auth_bundle, tiktok_inspect, x_inspect, AuthBundle,
     GoogleAuthBundle, GoogleClient, GoogleResolvedConfig, GraphClient, LinkedInAuthBundle,
     LinkedInClient, LinkedInResolvedConfig, MetaAuthBundle, OsKeyringStore, PinterestAuthBundle,
     PinterestClient, PinterestResolvedConfig, SecretStoreError, SecretStoreErrorKind, TikTokClient,
-    TikTokResolvedConfig, AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
+    TikTokResolvedConfig, XAuthBundle, XClient, XResolvedConfig, AUTH_BUNDLE_ACCOUNT,
+    AUTH_BUNDLE_SERVICE,
 };
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use dialoguer::{theme::ColorfulTheme, Select};
@@ -42,6 +46,7 @@ use linkedin::LinkedInCommand;
 use meta::MetaCommand;
 use pinterest::PinterestCommand;
 use tiktok::TikTokCommand;
+use x::XCommand;
 
 // ---------------------------------------------------------------------------
 // Shared arg structs (reused across providers)
@@ -163,6 +168,11 @@ enum Command {
         #[command(subcommand)]
         command: LinkedInCommand,
     },
+    #[command(about = "X Ads API commands")]
+    X {
+        #[command(subcommand)]
+        command: XCommand,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -205,6 +215,7 @@ enum RootAuthProvider {
     Tiktok,
     Pinterest,
     Linkedin,
+    X,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -252,6 +263,7 @@ impl RootAuthProvider {
             Self::Tiktok => "tiktok",
             Self::Pinterest => "pinterest",
             Self::Linkedin => "linkedin",
+            Self::X => "x",
         }
     }
 }
@@ -272,12 +284,13 @@ impl RootAuthFlow {
     }
 }
 
-const ROOT_AUTH_PROVIDER_ORDER: [RootAuthProvider; 5] = [
+const ROOT_AUTH_PROVIDER_ORDER: [RootAuthProvider; 6] = [
     RootAuthProvider::Meta,
     RootAuthProvider::Google,
     RootAuthProvider::Tiktok,
     RootAuthProvider::Pinterest,
     RootAuthProvider::Linkedin,
+    RootAuthProvider::X,
 ];
 
 // ---------------------------------------------------------------------------
@@ -348,6 +361,13 @@ async fn main() -> ExitCode {
         timeout_seconds,
         output_format: format.map(Into::into),
         ..LinkedInConfigOverrides::default()
+    };
+    let x_overrides = XConfigOverrides {
+        api_base_url: api_base_url.clone(),
+        api_version: api_version.clone(),
+        timeout_seconds,
+        output_format: format.map(Into::into),
+        ..XConfigOverrides::default()
     };
 
     let result = match command {
@@ -452,6 +472,46 @@ async fn main() -> ExitCode {
                     });
                     eprintln!("{rendered}");
                     return ExitCode::from(linkedin_err.exit_code() as u8);
+                }
+            }
+        }
+        Command::X { command } => {
+            if format.is_none() {
+                output_options.format =
+                    match resolve_x_output_format(config.as_deref(), &secret_store, &x_overrides) {
+                        Ok(format) => format,
+                        Err(error) => {
+                            let payload = x_error_payload(&error);
+                            let rendered = if output_options.pretty {
+                                serde_json::to_string_pretty(&payload)
+                            } else {
+                                serde_json::to_string(&payload)
+                            }
+                            .unwrap_or_else(|_| {
+                                "{\"error\":{\"message\":\"failed to serialize error\"}}"
+                                    .to_string()
+                            });
+                            eprintln!("{rendered}");
+                            return ExitCode::from(error.exit_code() as u8);
+                        }
+                    };
+            }
+            let x_result =
+                dispatch_x(command, &secret_store, config.as_deref(), &x_overrides).await;
+            match x_result {
+                Ok(result) => Ok(result),
+                Err(x_err) => {
+                    let payload = x_error_payload(&x_err);
+                    let rendered = if output_options.pretty {
+                        serde_json::to_string_pretty(&payload)
+                    } else {
+                        serde_json::to_string(&payload)
+                    }
+                    .unwrap_or_else(|_| {
+                        "{\"error\":{\"message\":\"failed to serialize error\"}}".to_string()
+                    });
+                    eprintln!("{rendered}");
+                    return ExitCode::from(x_err.exit_code() as u8);
                 }
             }
         }
@@ -689,6 +749,30 @@ async fn dispatch_linkedin(
     }
 }
 
+async fn dispatch_x(
+    command: XCommand,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    config_path: Option<&Path>,
+    overrides: &XConfigOverrides,
+) -> Result<CommandResult, XError> {
+    match command {
+        XCommand::Auth { command } => x::handle_auth(command, secret_store),
+        XCommand::Config { command } => {
+            let snapshot = x_inspect(config_path, secret_store, overrides)?;
+            x::handle_config(command, snapshot)
+        }
+        XCommand::Doctor(args) => {
+            let snapshot = x_inspect(config_path, secret_store, overrides)?;
+            x::handle_doctor(args, config_path, secret_store, overrides, snapshot).await
+        }
+        command => {
+            let config = XResolvedConfig::load(config_path, secret_store, overrides)?;
+            let client = XClient::from_config(&config)?;
+            x::dispatch_x_with_client(&client, &config, command).await
+        }
+    }
+}
+
 async fn dispatch_pinterest(
     command: PinterestCommand,
     secret_store: &dyn agent_ads_core::SecretStore,
@@ -741,6 +825,14 @@ fn resolve_linkedin_output_format(
     overrides: &LinkedInConfigOverrides,
 ) -> Result<OutputFormat, LinkedInError> {
     linkedin_inspect(config_path, secret_store, overrides).map(|snapshot| snapshot.output_format)
+}
+
+fn resolve_x_output_format(
+    config_path: Option<&Path>,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    overrides: &XConfigOverrides,
+) -> Result<OutputFormat, XError> {
+    x_inspect(config_path, secret_store, overrides).map(|snapshot| snapshot.output_format)
 }
 
 fn resolve_pinterest_output_format(
@@ -834,6 +926,36 @@ fn linkedin_error_payload(error: &LinkedInError) -> Value {
             "error": {
                 "kind": "internal",
                 "provider": "linkedin",
+                "message": error.to_string()
+            }
+        }),
+    }
+}
+
+fn x_error_payload(error: &XError) -> Value {
+    match error {
+        XError::Api(XApiError {
+            message,
+            code,
+            parameter,
+            request_id,
+            http_status,
+            ..
+        }) => json!({
+            "error": {
+                "kind": "api",
+                "provider": "x",
+                "message": message,
+                "code": code,
+                "parameter": parameter,
+                "status": http_status,
+                "request_id": request_id,
+            }
+        }),
+        _ => json!({
+            "error": {
+                "kind": "internal",
+                "provider": "x",
                 "message": error.to_string()
             }
         }),
@@ -1325,6 +1447,48 @@ fn run_root_auth_setup(
                 None,
             )
         }
+        RootAuthProvider::X => {
+            let inputs = match x::resolve_auth_inputs(&x::AuthSetArgs {
+                stdin: false,
+                consumer_key: None,
+                consumer_secret: None,
+                access_token: None,
+                access_token_secret: None,
+            }) {
+                Ok(inputs) => inputs,
+                Err(error) => return exit_with_x_error(&error, output_options),
+            };
+            bundle.x = Some(XAuthBundle {
+                consumer_key: Some(inputs.consumer_key),
+                consumer_secret: Some(inputs.consumer_secret),
+                access_token: Some(inputs.access_token),
+                access_token_secret: Some(inputs.access_token_secret),
+            });
+
+            if let Err(error) = persist_root_auth_bundle(provider, secret_store, &bundle) {
+                return exit_with_x_error(&XError::Config(error.to_string()), output_options);
+            }
+
+            emit_result(
+                static_command_result(
+                    json!({
+                        "provider": "x",
+                        "stored": true,
+                        "recovered_invalid_bundle": recovered_invalid_bundle,
+                        "credentials_stored": [
+                            "consumer_key",
+                            "consumer_secret",
+                            "access_token",
+                            "access_token_secret"
+                        ],
+                    }),
+                    "/x/auth/set",
+                    0,
+                ),
+                output_options,
+                None,
+            )
+        }
     }
 }
 
@@ -1484,6 +1648,21 @@ fn run_root_auth_clear_with_bundle(
                 0,
             )
         }
+        RootAuthProvider::X => {
+            let deleted_x = bundle.x.take();
+            static_command_result(
+                json!({
+                    "provider": "x",
+                    "consumer_key_deleted": deleted_x.as_ref().and_then(|x| x.consumer_key.as_ref()).is_some(),
+                    "consumer_secret_deleted": deleted_x.as_ref().and_then(|x| x.consumer_secret.as_ref()).is_some(),
+                    "access_token_deleted": deleted_x.as_ref().and_then(|x| x.access_token.as_ref()).is_some(),
+                    "access_token_secret_deleted": deleted_x.as_ref().and_then(|x| x.access_token_secret.as_ref()).is_some(),
+                    "recovered_invalid_bundle": recovered_invalid_bundle,
+                }),
+                "/x/auth/delete",
+                0,
+            )
+        }
     };
 
     if let Err(error) = persist_root_auth_bundle(provider, secret_store, bundle) {
@@ -1501,6 +1680,9 @@ fn run_root_auth_clear_with_bundle(
             ),
             RootAuthProvider::Linkedin => {
                 exit_with_linkedin_error(&LinkedInError::Config(error.to_string()), output_options)
+            }
+            RootAuthProvider::X => {
+                exit_with_x_error(&XError::Config(error.to_string()), output_options)
             }
         };
     }
@@ -1590,6 +1772,9 @@ fn persist_root_auth_bundle(
         RootAuthProvider::Linkedin => MetaAdsError::Config(
             linkedin::auth_storage_error("store LinkedIn credentials", &error).to_string(),
         ),
+        RootAuthProvider::X => MetaAdsError::Config(
+            x::auth_storage_error("store X Ads credentials", &error).to_string(),
+        ),
     })
 }
 
@@ -1650,6 +1835,10 @@ fn run_root_auth_delete_provider(
                 Err(error) => exit_with_linkedin_error(&error, output_options),
             }
         }
+        RootAuthProvider::X => match x::handle_auth(x::AuthCommand::Delete, secret_store) {
+            Ok(result) => emit_result(result, output_options, None),
+            Err(error) => exit_with_x_error(&error, output_options),
+        },
     }
 }
 
@@ -1686,6 +1875,7 @@ fn build_root_auth_status_from_bundle_result(
         build_tiktok_root_auth_status(bundle, store_error.as_ref()),
         build_pinterest_root_auth_status(bundle, store_error.as_ref()),
         build_linkedin_root_auth_status(bundle, store_error.as_ref()),
+        build_x_root_auth_status(bundle, store_error.as_ref()),
     ]
 }
 
@@ -1896,6 +2086,57 @@ fn build_linkedin_root_auth_status(
     )
 }
 
+fn build_x_root_auth_status(
+    bundle: Option<&AuthBundle>,
+    store_error: Option<&SecretStoreError>,
+) -> RootProviderAuthStatus {
+    let consumer_key = root_bundle_credential(
+        agent_ads_core::X_ADS_CONSUMER_KEY_ENV_VAR,
+        bundle
+            .and_then(|bundle| bundle.x.as_ref())
+            .and_then(|x| x.consumer_key.as_ref())
+            .is_some(),
+    );
+    let consumer_secret = root_bundle_credential(
+        agent_ads_core::X_ADS_CONSUMER_SECRET_ENV_VAR,
+        bundle
+            .and_then(|bundle| bundle.x.as_ref())
+            .and_then(|x| x.consumer_secret.as_ref())
+            .is_some(),
+    );
+    let access_token = root_bundle_credential(
+        agent_ads_core::X_ADS_ACCESS_TOKEN_ENV_VAR,
+        bundle
+            .and_then(|bundle| bundle.x.as_ref())
+            .and_then(|x| x.access_token.as_ref())
+            .is_some(),
+    );
+    let access_token_secret = root_bundle_credential(
+        agent_ads_core::X_ADS_ACCESS_TOKEN_SECRET_ENV_VAR,
+        bundle
+            .and_then(|bundle| bundle.x.as_ref())
+            .and_then(|x| x.access_token_secret.as_ref())
+            .is_some(),
+    );
+    let usable = consumer_key.present
+        && consumer_secret.present
+        && access_token.present
+        && access_token_secret.present;
+
+    provider_auth_summary(
+        RootAuthProvider::X,
+        usable,
+        credential_store_available(store_error),
+        credential_store_error(store_error),
+        [
+            ("consumer_key".to_string(), consumer_key),
+            ("consumer_secret".to_string(), consumer_secret),
+            ("access_token".to_string(), access_token),
+            ("access_token_secret".to_string(), access_token_secret),
+        ],
+    )
+}
+
 fn provider_auth_summary(
     provider: RootAuthProvider,
     usable: bool,
@@ -2020,6 +2261,12 @@ fn handle_providers(command: ProvidersCommand) -> CommandResult {
                     "implemented": true,
                     "status": "available",
                     "summary": "Read-only LinkedIn Marketing API support."
+                },
+                {
+                    "provider": "x",
+                    "implemented": true,
+                    "status": "available",
+                    "summary": "Read-only X Ads API support."
                 }
             ]),
             "/providers",
@@ -2152,6 +2399,10 @@ fn exit_with_linkedin_error(error: &LinkedInError, options: &OutputOptions) -> E
         options,
         error.exit_code() as u8,
     )
+}
+
+fn exit_with_x_error(error: &XError, options: &OutputOptions) -> ExitCode {
+    render_error_payload(x_error_payload(error), options, error.exit_code() as u8)
 }
 
 fn exit_with_pinterest_error(error: &PinterestError, options: &OutputOptions) -> ExitCode {
@@ -2364,6 +2615,7 @@ mod tests {
         assert!(help.contains("tiktok"));
         assert!(help.contains("pinterest"));
         assert!(help.contains("linkedin"));
+        assert!(help.contains("x"));
     }
 
     #[test]
@@ -2416,7 +2668,7 @@ mod tests {
 
     #[test]
     fn root_auth_clear_requires_interactive_terminal() {
-        let error = validate_root_auth_clear_mode(false, None).unwrap_err();
+        let error = validate_root_auth_clear_mode(true, None).unwrap_err();
         assert!(error.to_string().contains("agent-ads auth clear"));
         assert!(error.to_string().contains("auth delete"));
     }
@@ -2458,18 +2710,24 @@ mod tests {
         env::remove_var("PINTEREST_ADS_ACCESS_TOKEN");
         env::remove_var("PINTEREST_ADS_REFRESH_TOKEN");
         env::remove_var("LINKEDIN_ADS_ACCESS_TOKEN");
+        env::remove_var("X_ADS_CONSUMER_KEY");
+        env::remove_var("X_ADS_CONSUMER_SECRET");
+        env::remove_var("X_ADS_ACCESS_TOKEN");
+        env::remove_var("X_ADS_ACCESS_TOKEN_SECRET");
 
         let store = FakeSecretStore::default();
         let summaries = build_root_auth_status(&store);
         let items = root_auth_menu_items(&summaries);
 
-        assert_eq!(items.len(), 5);
+        assert_eq!(items.len(), 6);
         assert!(items[0].contains("meta"));
         assert!(items[0].contains("0/1"));
         assert!(items[1].contains("google"));
         assert!(items[1].contains("0/4"));
         assert!(items[4].contains("linkedin"));
         assert!(items[4].contains("0/1"));
+        assert!(items[5].contains("x"));
+        assert!(items[5].contains("0/4"));
     }
 
     #[test]
@@ -2497,7 +2755,7 @@ mod tests {
 
         let summaries = build_root_auth_status(&store);
 
-        assert_eq!(summaries.len(), 5);
+        assert_eq!(summaries.len(), 6);
         assert_eq!(store.get_call_count(), 1);
     }
 
@@ -3242,5 +3500,72 @@ mod tests {
         .unwrap();
 
         assert_eq!(format, OutputFormat::Csv);
+    }
+
+    #[test]
+    fn x_help_lists_command_topics() {
+        let help = nested_help(&["x"]);
+        assert!(help.contains("accounts"));
+        assert!(help.contains("campaigns"));
+        assert!(help.contains("promoted-tweets"));
+        assert!(help.contains("analytics"));
+        assert!(help.contains("auth"));
+        assert!(help.contains("doctor"));
+        assert!(help.contains("config"));
+    }
+
+    #[test]
+    fn x_help_uses_documented_resource_identifiers() {
+        let account_media_get_help = nested_help(&["x", "account-media", "get"]);
+        assert!(account_media_get_help.contains("--account-media-id"));
+        assert!(!account_media_get_help.contains("--media-key"));
+
+        let cards_get_help = nested_help(&["x", "cards", "get"]);
+        assert!(cards_get_help.contains("--card-id"));
+        assert!(cards_get_help.contains("--card-uri"));
+
+        let draft_tweets_get_help = nested_help(&["x", "draft-tweets", "get"]);
+        assert!(draft_tweets_get_help.contains("--draft-tweet-id"));
+        assert!(!draft_tweets_get_help.contains("--tweet-id"));
+    }
+
+    #[test]
+    fn x_list_help_uses_supported_filters() {
+        let media_library_list_help = nested_help(&["x", "media-library", "list"]);
+        assert!(media_library_list_help.contains("--media-type"));
+        assert!(media_library_list_help.contains("--query"));
+        assert!(!media_library_list_help.contains("--media-key"));
+
+        let draft_tweets_list_help = nested_help(&["x", "draft-tweets", "list"]);
+        assert!(draft_tweets_list_help.contains("--user-id"));
+        assert!(!draft_tweets_list_help.contains("--tweet-id"));
+
+        let scheduled_tweets_list_help = nested_help(&["x", "scheduled-tweets", "list"]);
+        assert!(scheduled_tweets_list_help.contains("--user-id"));
+        assert!(!scheduled_tweets_list_help.contains("--scheduled-tweet-id"));
+    }
+
+    #[test]
+    fn x_deleted_entity_commands_expose_with_deleted() {
+        let campaigns_list_help = nested_help(&["x", "campaigns", "list"]);
+        assert!(campaigns_list_help.contains("--with-deleted"));
+
+        let promoted_tweets_get_help = nested_help(&["x", "promoted-tweets", "get"]);
+        assert!(promoted_tweets_get_help.contains("--with-deleted"));
+
+        let cards_get_help = nested_help(&["x", "cards", "get"]);
+        assert!(cards_get_help.contains("--with-deleted"));
+    }
+
+    #[test]
+    fn x_non_deleted_commands_do_not_expose_with_deleted() {
+        let media_library_list_help = nested_help(&["x", "media-library", "list"]);
+        assert!(!media_library_list_help.contains("--with-deleted"));
+
+        let draft_tweets_get_help = nested_help(&["x", "draft-tweets", "get"]);
+        assert!(!draft_tweets_get_help.contains("--with-deleted"));
+
+        let analytics_query_help = nested_help(&["x", "analytics", "query"]);
+        assert!(!analytics_query_help.contains("--with-deleted"));
     }
 }

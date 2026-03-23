@@ -41,6 +41,7 @@ export const sidebarNav = {
       { to: "/engines/tiktok", label: "TikTok" },
       { to: "/engines/pinterest", label: "Pinterest" },
       { to: "/engines/linkedin", label: "LinkedIn" },
+      { to: "/engines/x", label: "X Ads" },
     ],
   },
 } as const;
@@ -50,7 +51,7 @@ export const headerLinks = [
   { href: repoLinks.npm, label: "NPM" },
 ] as const;
 
-export const engineOrder: EngineId[] = ["meta", "google", "tiktok", "pinterest", "linkedin"];
+export const engineOrder: EngineId[] = ["meta", "google", "tiktok", "pinterest", "linkedin", "x"];
 
 export const engines: Record<EngineId, EngineMeta> = {
   meta: {
@@ -144,6 +145,24 @@ export const engines: Record<EngineId, EngineMeta> = {
       { label: "Best for", value: "B2B reporting and creative audits" },
     ],
   },
+  x: {
+    id: "x",
+    name: "X Ads",
+    eyebrow: "Ads API",
+    description:
+      "Inspect X Ads accounts, campaign objects, promoted tweets, and synchronous or async analytics.",
+    firstCommand: "agent-ads x doctor",
+    tags: ["Analytics", "Promoted tweets", "OAuth 1.0a"],
+    quickStartLead:
+      "Use X for ads account discovery, campaign hierarchy inspection, promoted-tweet audits, and X-native analytics workflows.",
+    referenceLead:
+      "Auth, config, campaign management, creatives, audiences, measurement, and analytics for X Ads.",
+    stats: [
+      { label: "Auth", value: "4-secret OAuth 1.0a bundle" },
+      { label: "Scope", value: "Ads account IDs" },
+      { label: "Best for", value: "Campaign diagnostics and analytics jobs" },
+    ],
+  },
 };
 
 export const homeCLIExamples = [
@@ -182,6 +201,13 @@ export const homeCLIExamples = [
     command:
       "$ agent-ads linkedin analytics query \\\n  --finder statistics \\\n  --account-id 1234567890 \\\n  --pivot CAMPAIGN \\\n  --time-granularity DAILY \\\n  --since 2026-03-01 \\\n  --until 2026-03-16 \\\n  --fields impressions,clicks,costInLocalCurrency",
   },
+  {
+    id: "x-analytics",
+    engine: "X",
+    label: "Campaign engagement and billing",
+    command:
+      "$ agent-ads x analytics query \\\n  --account-id 18ce54d4x5t \\\n  --entity campaign \\\n  --entity-id c1234567890 \\\n  --start-time 2026-03-01T00:00:00Z \\\n  --end-time 2026-03-07T00:00:00Z \\\n  --granularity day \\\n  --placement all-on-twitter \\\n  --metric-group engagement,billing",
+  },
 ] as const;
 
 export const homePromptCards = [
@@ -219,6 +245,13 @@ export const homePromptCards = [
     prompt: "Show daily LinkedIn campaign clicks and spend for last week",
     command:
       "$ agent-ads linkedin analytics query \\\n  --finder statistics \\\n  --account-id 1234567890 \\\n  --pivot CAMPAIGN \\\n  --time-granularity DAILY \\\n  --since 2026-03-15 \\\n  --until 2026-03-22 \\\n  --fields impressions,clicks,costInLocalCurrency",
+  },
+  {
+    id: "x-reporting",
+    category: "X Analytics",
+    prompt: "Show last week's X campaign engagement and billing metrics",
+    command:
+      "$ agent-ads x analytics query \\\n  --account-id 18ce54d4x5t \\\n  --entity campaign \\\n  --entity-id c1234567890 \\\n  --start-time 2026-03-15T00:00:00Z \\\n  --end-time 2026-03-22T00:00:00Z \\\n  --granularity day \\\n  --placement all-on-twitter \\\n  --metric-group engagement,billing",
   },
 ] as const;
 

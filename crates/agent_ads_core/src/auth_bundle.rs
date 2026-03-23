@@ -49,6 +49,8 @@ pub struct AuthBundle {
     pub pinterest: Option<PinterestAuthBundle>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub linkedin: Option<LinkedInAuthBundle>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub x: Option<XAuthBundle>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -99,6 +101,18 @@ pub struct LinkedInAuthBundle {
     pub access_token: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct XAuthBundle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumer_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consumer_secret: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_token_secret: Option<String>,
+}
+
 impl Default for AuthBundle {
     fn default() -> Self {
         Self {
@@ -108,6 +122,7 @@ impl Default for AuthBundle {
             tiktok: None,
             pinterest: None,
             linkedin: None,
+            x: None,
         }
     }
 }
@@ -119,6 +134,7 @@ impl AuthBundle {
             && self.tiktok.is_none()
             && self.pinterest.is_none()
             && self.linkedin.is_none()
+            && self.x.is_none()
     }
 
     pub fn normalize(&mut self) {
@@ -129,6 +145,7 @@ impl AuthBundle {
         normalize_section(&mut self.tiktok);
         normalize_section(&mut self.pinterest);
         normalize_section(&mut self.linkedin);
+        normalize_section(&mut self.x);
     }
 }
 
@@ -197,6 +214,22 @@ impl LinkedInAuthBundle {
 
     fn is_empty(&self) -> bool {
         self.access_token.is_none()
+    }
+}
+
+impl XAuthBundle {
+    fn normalize(&mut self) {
+        normalize_secret(&mut self.consumer_key);
+        normalize_secret(&mut self.consumer_secret);
+        normalize_secret(&mut self.access_token);
+        normalize_secret(&mut self.access_token_secret);
+    }
+
+    fn is_empty(&self) -> bool {
+        self.consumer_key.is_none()
+            && self.consumer_secret.is_none()
+            && self.access_token.is_none()
+            && self.access_token_secret.is_none()
     }
 }
 
@@ -458,6 +491,16 @@ impl BundleSection for LinkedInAuthBundle {
     }
 }
 
+impl BundleSection for XAuthBundle {
+    fn normalize(&mut self) {
+        XAuthBundle::normalize(self);
+    }
+
+    fn is_empty(&self) -> bool {
+        XAuthBundle::is_empty(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -467,7 +510,7 @@ mod tests {
 
     use super::{
         load_auth_bundle, mutate_auth_bundle, store_auth_bundle, AuthBundle, GoogleAuthBundle,
-        LinkedInAuthBundle, MetaAuthBundle, PinterestAuthBundle, TikTokAuthBundle,
+        LinkedInAuthBundle, MetaAuthBundle, PinterestAuthBundle, TikTokAuthBundle, XAuthBundle,
         AUTH_BUNDLE_VERSION,
     };
     use crate::secret_store::{
@@ -546,6 +589,12 @@ mod tests {
             linkedin: Some(LinkedInAuthBundle {
                 access_token: Some("linkedin-token".to_string()),
             }),
+            x: Some(XAuthBundle {
+                consumer_key: Some("consumer-key".to_string()),
+                consumer_secret: Some("consumer-secret".to_string()),
+                access_token: Some("x-access-token".to_string()),
+                access_token_secret: Some("x-access-token-secret".to_string()),
+            }),
         };
 
         store_auth_bundle(&store, &bundle).unwrap();
@@ -567,6 +616,10 @@ mod tests {
         assert_eq!(
             loaded.linkedin.unwrap().access_token.as_deref(),
             Some("linkedin-token")
+        );
+        assert_eq!(
+            loaded.x.unwrap().consumer_key.as_deref(),
+            Some("consumer-key")
         );
     }
 

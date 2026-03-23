@@ -2,7 +2,7 @@
 
 CLI for querying ad platform APIs.
 
-Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram), Google Ads, TikTok, Pinterest, and LinkedIn supported today, read-only.
+Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram), Google Ads, TikTok, Pinterest, LinkedIn, and X supported today, read-only.
 
 ## Install
 
@@ -367,6 +367,82 @@ agent-ads linkedin analytics query \
   --since 2026-03-01 \
   --until 2026-03-16 \
   --fields impressions,clicks,costInLocalCurrency
+```
+
+## Quick Start (X)
+
+### 1. Authenticate
+
+X Ads v1 uses four manual OAuth 1.0a credentials: consumer key, consumer secret, access token, and access token secret. Store them once in your OS credential store:
+
+```bash
+agent-ads x auth set
+```
+
+Or set shell variables for the current process:
+
+```bash
+export X_ADS_CONSUMER_KEY=consumer-key
+export X_ADS_CONSUMER_SECRET=consumer-secret
+export X_ADS_ACCESS_TOKEN=access-token
+export X_ADS_ACCESS_TOKEN_SECRET=access-token-secret
+```
+
+Optional default account:
+
+```bash
+export X_ADS_DEFAULT_ACCOUNT_ID=18ce54d4x5t
+```
+
+### 2. Verify your setup
+
+```bash
+agent-ads x doctor
+```
+
+Add `--api` to also make a lightweight X Ads API request.
+
+### 3. Discover your ads accounts
+
+```bash
+agent-ads x accounts list
+agent-ads x authenticated-user-access get --account-id 18ce54d4x5t
+```
+
+### 4. Explore campaigns and line items
+
+```bash
+agent-ads x campaigns list --account-id 18ce54d4x5t
+agent-ads x line-items list --account-id 18ce54d4x5t
+agent-ads x promoted-tweets list --account-id 18ce54d4x5t
+```
+
+### 5. Run a synchronous analytics query
+
+```bash
+agent-ads x analytics query \
+  --account-id 18ce54d4x5t \
+  --entity campaign \
+  --entity-id c1234567890 \
+  --start-time 2026-03-01T00:00:00Z \
+  --end-time 2026-03-07T00:00:00Z \
+  --granularity day \
+  --placement all-on-twitter \
+  --metric-group engagement,billing
+```
+
+### 6. Submit an async analytics job
+
+```bash
+agent-ads x analytics jobs submit \
+  --account-id 18ce54d4x5t \
+  --entity campaign \
+  --entity-id c1234567890 \
+  --start-time 2026-01-01T00:00:00Z \
+  --end-time 2026-03-01T00:00:00Z \
+  --granularity day \
+  --placement all-on-twitter \
+  --metric-group engagement,billing
 ```
 
 ## Quick Start (Google)

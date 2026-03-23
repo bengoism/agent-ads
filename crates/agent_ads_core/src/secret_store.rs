@@ -33,6 +33,15 @@ pub const TIKTOK_APP_SECRET_ACCOUNT: &str = "tiktok-app-secret";
 pub const TIKTOK_REFRESH_TOKEN_SERVICE: &str = "agent-ads";
 pub const TIKTOK_REFRESH_TOKEN_ACCOUNT: &str = "tiktok-refresh-token";
 
+pub const X_ADS_CONSUMER_KEY_SERVICE: &str = "agent-ads";
+pub const X_ADS_CONSUMER_KEY_ACCOUNT: &str = "x-ads-consumer-key";
+pub const X_ADS_CONSUMER_SECRET_SERVICE: &str = "agent-ads";
+pub const X_ADS_CONSUMER_SECRET_ACCOUNT: &str = "x-ads-consumer-secret";
+pub const X_ADS_ACCESS_TOKEN_SERVICE: &str = "agent-ads";
+pub const X_ADS_ACCESS_TOKEN_ACCOUNT: &str = "x-ads-access-token";
+pub const X_ADS_ACCESS_TOKEN_SECRET_SERVICE: &str = "agent-ads";
+pub const X_ADS_ACCESS_TOKEN_SECRET_ACCOUNT: &str = "x-ads-access-token-secret";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretStoreErrorKind {
     Unavailable,
