@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { Link } from "react-router";
 import remarkGfm from "remark-gfm";
@@ -8,7 +8,7 @@ import { tokenizeShell } from "./tokenize-shell";
 /* ─── Shared class-string constants ─────────────────────── */
 
 const btnBase =
-  "inline-flex items-center justify-center min-h-[2.75rem] py-[0.65rem] px-4 rounded text-[0.9rem] font-bold tracking-[-0.01em] transition-[transform,background,color] duration-[180ms] hover:-translate-y-px motion-reduce:transition-none motion-reduce:transform-none w-full sm:w-auto";
+  "inline-flex items-center justify-center min-h-[2.75rem] py-[0.65rem] px-4 rounded text-[0.9rem] font-bold tracking-[-0.01em] w-full sm:w-auto";
 
 export const btnPrimary = `${btnBase} bg-gradient-to-br from-accent to-accent-strong text-[#0d0f19]`;
 export const btnSecondary = `${btnBase} border-[0.5px] border-[rgba(70,69,84,0.4)] text-fg-muted bg-[rgba(14,14,15,0.48)]`;
@@ -32,38 +32,6 @@ async function copyToClipboard(text: string) {
   textarea.select();
   document.execCommand("copy");
   document.body.removeChild(textarea);
-}
-
-export function useRevealObserver(routeKey: string) {
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const revealElements = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
-
-    const revealObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible");
-            revealObserver.unobserve(entry.target);
-          }
-        }
-      },
-      {
-        rootMargin: "0px 0px -12% 0px",
-        threshold: 0.18,
-      },
-    );
-
-    for (const revealElement of revealElements) {
-      revealElement.classList.remove("is-visible");
-      revealObserver.observe(revealElement);
-    }
-
-    return () => revealObserver.disconnect();
-  }, [routeKey]);
 }
 
 /* ─── Components ────────────────────────────────────────── */
@@ -111,8 +79,7 @@ export function PageHero({
 }) {
   return (
     <section
-      className="relative grid gap-[clamp(1.75rem,3vw,3rem)] p-[clamp(1.4rem,2vw,2.2rem)] rounded bg-gradient-to-b from-[rgba(28,27,28,0.92)] to-[rgba(18,18,19,0.98)] shadow-ambient overflow-hidden lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.92fr)] before:content-[''] before:absolute before:-right-[10%] before:-bottom-[30%] before:w-[28rem] before:h-[28rem] before:bg-[radial-gradient(circle,rgba(192,193,255,0.18),transparent_66%)] before:pointer-events-none reveal"
-      data-reveal
+      className="relative grid gap-[clamp(1.75rem,3vw,3rem)] p-[clamp(1.4rem,2vw,2.2rem)] rounded bg-gradient-to-b from-[rgba(28,27,28,0.92)] to-[rgba(18,18,19,0.98)] shadow-ambient overflow-hidden lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.92fr)] before:content-[''] before:absolute before:-right-[10%] before:-bottom-[30%] before:w-[28rem] before:h-[28rem] before:bg-[radial-gradient(circle,rgba(192,193,255,0.18),transparent_66%)] before:pointer-events-none"
     >
       <div className="grid gap-[1.2rem]">
         <div className="flex flex-wrap gap-2">

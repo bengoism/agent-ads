@@ -41,7 +41,7 @@ export default function ConfigRoute() {
         <SectionHeader
           eyebrow="Output"
           title="Output Flags"
-          copy="Shared output flags work the same way across all engines."
+          copy="Shared output flags work the same way across all providers."
         />
         <CommandPanel
           compact
@@ -70,7 +70,7 @@ export default function ConfigRoute() {
         <SectionHeader
           eyebrow="Doctor"
           title="Doctor Commands"
-          copy="Each engine has a doctor command that verifies your setup. Add --api to also test API connectivity."
+          copy="Each provider has a doctor command that verifies your setup. Add --api to also test API connectivity."
         />
         <CommandPanel
           compact
@@ -106,6 +106,13 @@ export default function ConfigRoute() {
           title="Verify LinkedIn setup"
           command="agent-ads linkedin doctor --api"
           copyKey="doctor-linkedin"
+        />
+        <CommandPanel
+          compact
+          eyebrow="X"
+          title="Verify X setup"
+          command="agent-ads x doctor --api"
+          copyKey="doctor-x"
         />
       </section>
     </>

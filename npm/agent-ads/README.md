@@ -25,20 +25,7 @@ agent-ads meta insights query \
   --date-preset last_7d
 ```
 
-Every provider follows the same shape: `agent-ads <provider> <command>`.
-
-| Provider | Authenticate | Start with |
-| --- | --- | --- |
-| Meta | `agent-ads meta auth set` | `agent-ads meta insights query --account act_1234567890 --level campaign --fields campaign_id,spend --date-preset last_7d` |
-| Google Ads | `agent-ads google auth set` | `agent-ads google gaql search --customer-id 123-456-7890 --query "SELECT campaign.name FROM campaign"` |
-| TikTok | `agent-ads tiktok auth set --full` | `agent-ads tiktok insights query --advertiser-id 1234567890 --data-level AUCTION_CAMPAIGN --metrics spend,clicks` |
-| Pinterest | `agent-ads pinterest auth set` | `agent-ads pinterest analytics query --ad-account-id 1234567890 --columns IMPRESSION_1,SPEND_IN_DOLLAR --start-date 2026-03-01 --end-date 2026-03-16` |
-| LinkedIn | `agent-ads linkedin auth set` | `agent-ads linkedin analytics query --finder statistics --account-id 1234567890 --pivot CAMPAIGN --fields impressions,clicks,costInLocalCurrency` |
-| X | `agent-ads x auth set` | `agent-ads x analytics query --account-id 18ce54d4x5t --entity campaign --entity-id c123 --start-time 2026-03-01T00:00:00Z --end-time 2026-03-07T00:00:00Z --granularity day --placement all-on-twitter --metric-group engagement,billing` |
-
-Verify any configured provider with `agent-ads <provider> doctor`.
-
-For X Ads reads, use `--with-deleted` on supported account-scoped resources to inspect deleted entities, and use `agent-ads x cards get --card-id ...` or `--card-uri ...` to resolve cards through the documented fetch surface.
+Google, TikTok, Pinterest, LinkedIn, and X follow the same pattern: `agent-ads google ...`, `agent-ads tiktok ...`, `agent-ads pinterest ...`, `agent-ads linkedin ...`, `agent-ads x ...`.
 
 ## Claude Code Skill
 
