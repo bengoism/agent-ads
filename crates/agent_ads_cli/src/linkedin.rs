@@ -913,22 +913,9 @@ fn normalize_campaign_urn(value: &str) -> Result<String, LinkedInError> {
 }
 
 fn normalize_creative_urn(value: &str) -> Result<String, LinkedInError> {
-    let normalized = value.trim();
-    if let Some(id) = normalized.strip_prefix("urn:li:sponsoredCreative:") {
-        if !id.is_empty() {
-            return Ok(normalized.to_string());
-        }
-    }
-
-    if normalized
-        .chars()
-        .all(|character| character.is_ascii_digit())
-    {
-        return Ok(format!("urn:li:sponsoredCreative:{normalized}"));
-    }
-
-    Err(LinkedInError::InvalidArgument(
-        "creative ID must be numeric or a sponsored creative URN".to_string(),
+    Ok(format!(
+        "urn:li:sponsoredCreative:{}",
+        normalize_numeric_or_urn(value, "urn:li:sponsoredCreative:", "creative ID")?
     ))
 }
 
@@ -1425,13 +1412,27 @@ fn parse_date(value: &str, label: &str) -> Result<SimpleDate, LinkedInError> {
         LinkedInError::InvalidArgument(format!("{label} must be in YYYY-MM-DD format"))
     })?;
 
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    if !(1..=12).contains(&month) || !(1..=days_in_month(year, month)).contains(&day) {
         return Err(LinkedInError::InvalidArgument(format!(
             "{label} must be a valid calendar date"
         )));
     }
 
     Ok(SimpleDate { year, month, day })
+}
+
+fn is_leap_year(year: i32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => 0,
+    }
 }
 
 fn current_utc_date() -> SimpleDate {
@@ -1475,9 +1476,9 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        build_account_search_expression, parse_date, resolve_auth_token_input,
-        validate_revenue_date_range, AdAccountSearchArgs, AuthSetArgs, LinkedInAccessTokenSource,
-        SortOrderArg,
+        build_account_search_expression, normalize_creative_urn, parse_date,
+        resolve_auth_token_input, validate_revenue_date_range, AdAccountSearchArgs, AuthSetArgs,
+        LinkedInAccessTokenSource, SortOrderArg,
     };
     use agent_ads_core::linkedin_config::{LinkedInAccessTokenStatus, LinkedInAuthSnapshot};
 
@@ -1518,6 +1519,58 @@ mod tests {
         assert_eq!(date.year, 2026);
         assert_eq!(date.month, 3);
         assert_eq!(date.day, 23);
+    }
+
+    #[test]
+    fn rejects_impossible_calendar_dates() {
+        let error = parse_date("2026-02-31", "--since").unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("--since must be a valid calendar date"));
+    }
+
+    #[test]
+    fn rejects_non_leap_day_on_non_leap_year() {
+        let error = parse_date("2025-02-29", "--since").unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("--since must be a valid calendar date"));
+    }
+
+    #[test]
+    fn accepts_leap_day_on_leap_year() {
+        let date = parse_date("2024-02-29", "--since").unwrap();
+        assert_eq!(date.year, 2024);
+        assert_eq!(date.month, 2);
+        assert_eq!(date.day, 29);
+    }
+
+    #[test]
+    fn normalizes_numeric_creative_id_to_urn() {
+        let creative_urn = normalize_creative_urn("123").unwrap();
+        assert_eq!(creative_urn, "urn:li:sponsoredCreative:123");
+    }
+
+    #[test]
+    fn preserves_valid_numeric_creative_urn() {
+        let creative_urn = normalize_creative_urn("urn:li:sponsoredCreative:123").unwrap();
+        assert_eq!(creative_urn, "urn:li:sponsoredCreative:123");
+    }
+
+    #[test]
+    fn rejects_creative_urn_with_non_numeric_id() {
+        let error = normalize_creative_urn("urn:li:sponsoredCreative:not-a-number").unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("creative ID must be numeric or start with"));
+    }
+
+    #[test]
+    fn rejects_creative_urn_with_empty_suffix() {
+        let error = normalize_creative_urn("urn:li:sponsoredCreative:").unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("creative ID must be numeric or start with"));
     }
 
     #[test]
