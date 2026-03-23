@@ -211,6 +211,51 @@ export const homeCLIExamples = [
   },
 ] as const;
 
+export const homePromptCards = [
+  {
+    id: "meta-insights",
+    category: "Meta Insights",
+    prompt: "Break down last week's Meta spend by age and gender",
+    command:
+      "$ agent-ads meta insights query \\\n  --account act_12345678 \\\n  --fields spend,cpc,actions \\\n  --breakdowns age,gender \\\n  --date-preset last_7d",
+  },
+  {
+    id: "google-gaql",
+    category: "Google GAQL",
+    prompt: "Which Google campaigns spent the most last month?",
+    command:
+      '$ agent-ads google gaql search \\\n  --customer-id 123-456-7890 \\\n  --query "SELECT campaign.name,\n    metrics.cost_micros\n    FROM campaign\n    WHERE segments.date DURING LAST_30_DAYS\n    ORDER BY metrics.cost_micros DESC"',
+  },
+  {
+    id: "tiktok-performance",
+    category: "TikTok Performance",
+    prompt: "Show me cost per conversion for each TikTok campaign",
+    command:
+      "$ agent-ads tiktok insights query \\\n  --advertiser-id 7012345678901234 \\\n  --data-level AUCTION_CAMPAIGN \\\n  --metrics spend,conversion,cost_per_conversion",
+  },
+  {
+    id: "pinterest-conversions",
+    category: "Pinterest Conversions",
+    prompt: "How are my Pinterest conversions trending this week?",
+    command:
+      "$ agent-ads pinterest analytics query \\\n  --ad-account-id 549764106178 \\\n  --columns TOTAL_CONVERSIONS,TOTAL_PAGE_VISIT \\\n  --start-date 2026-03-15 --end-date 2026-03-22",
+  },
+  {
+    id: "linkedin-reporting",
+    category: "LinkedIn Reporting",
+    prompt: "Show daily LinkedIn campaign clicks and spend for last week",
+    command:
+      "$ agent-ads linkedin analytics query \\\n  --finder statistics \\\n  --account-id 1234567890 \\\n  --pivot CAMPAIGN \\\n  --time-granularity DAILY \\\n  --since 2026-03-15 \\\n  --until 2026-03-22 \\\n  --fields impressions,clicks,costInLocalCurrency",
+  },
+  {
+    id: "x-reporting",
+    category: "X Analytics",
+    prompt: "Show last week's X campaign engagement and billing metrics",
+    command:
+      "$ agent-ads x analytics query \\\n  --account-id 18ce54d4x5t \\\n  --entity campaign \\\n  --entity-id c1234567890 \\\n  --start-time 2026-03-15T00:00:00Z \\\n  --end-time 2026-03-22T00:00:00Z \\\n  --granularity day \\\n  --placement all-on-twitter \\\n  --metric-group engagement,billing",
+  },
+] as const;
+
 export const skillInstallCommand = "npx skills add bengoism/agent-ads";
 export const skillStartCommands = "agent-ads providers list\nagent-ads auth status";
 

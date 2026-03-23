@@ -3,7 +3,7 @@ import {
   engineOrder,
   engines,
   homeCLIExamples,
-  skillInstallCommand,
+  homePromptCards,
   version,
 } from "../content/site";
 import { CodeBlock } from "../components/code-block";
@@ -20,7 +20,7 @@ export const meta = () => [
   {
     name: "description",
     content:
-      "Read-only CLI for Meta, Google, TikTok, Pinterest, LinkedIn, and X ad APIs. JSON to stdout. Built in Rust.",
+      "Read-only CLI for Meta, Google, TikTok, Pinterest, LinkedIn, and X ad APIs. JSON to stdout. Built in Rust. Works with Claude Code.",
   },
 ];
 
@@ -84,7 +84,7 @@ export default function HomeRoute() {
             Rust powered CLI
           </span>
           <span className="inline-flex items-center py-[0.35rem] px-[0.65rem] rounded bg-surface-highest/52 text-fg-muted text-[0.72rem] font-bold tracking-[0.06em] uppercase">
-            Provider-first commands
+            Works with Claude Code
           </span>
         </div>
 
@@ -98,8 +98,8 @@ export default function HomeRoute() {
           </h1>
           <p className="m-0 max-w-[36rem] text-fg-muted text-[1.05rem] leading-[1.7]">
             Read-only access to Meta, Google, TikTok, Pinterest, LinkedIn, and X through one
-            CLI. Keep each command explicit with{" "}
-            <code className="markdown__inline-code">agent-ads &lt;provider&gt; &lt;command&gt;</code>.
+            CLI. Built for agents like Claude Code to safely query campaign insights across
+            multiple platforms.
           </p>
         </div>
 
@@ -144,39 +144,90 @@ export default function HomeRoute() {
         </div>
       </section>
 
-      {/* ── Skill ──────────────────────────────────────── */}
+      {/* ── Agent Integration ───────────────────────────── */}
+      <section className="grid gap-6">
+        <div className="flex flex-wrap gap-2">
+          <span className="inline-flex items-center py-[0.35rem] px-[0.65rem] rounded bg-accent/12 text-accent text-[0.72rem] font-bold tracking-[0.06em] uppercase">
+            Agent Integration
+          </span>
+        </div>
+        <SectionHeader
+          eyebrow=""
+          title="Better with an agent."
+          copy="agent-ads is built to work with coding agents like Claude Code. Ask questions in plain English — your agent picks the right command."
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {homePromptCards.map((card) => (
+            <article
+              key={card.id}
+              className="relative grid gap-3 p-5 rounded bg-surface-low border-[0.5px] border-outline overflow-hidden"
+            >
+              <div className="flex items-center justify-between">
+                <span className={eyebrowCls}>{card.category}</span>
+                <span
+                  className="w-6 h-6 flex items-center justify-center rounded bg-surface-highest/52 text-fg-dim text-[0.72rem]"
+                  aria-hidden="true"
+                >
+                  {card.category.includes("TikTok")
+                    ? "\u25B6"
+                    : card.category.includes("Pixel")
+                      ? "\u2665"
+                      : card.category.includes("Google")
+                        ? "\u2315"
+                        : card.category.includes("LinkedIn")
+                          ? "in"
+                        : "\u2913"}
+                </span>
+              </div>
+              <p className="m-0 text-base font-semibold leading-[1.5] text-fg">
+                &ldquo;{card.prompt}&rdquo;
+              </p>
+              <CodeBlock
+                code={card.command}
+                language="bash"
+                showHeader={false}
+                copyable={false}
+              />
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Skill for Claude Code ───────────────────────── */}
       <section className="grid gap-6">
         <article
           className="grid gap-4 p-6 rounded bg-surface-low border-[0.5px] border-outline"
         >
-          <span className={eyebrowCls}>Skill</span>
+          <span className={eyebrowCls}>Claude Code Skill</span>
           <h3 className="m-0 text-[clamp(1.4rem,2.2vw,2rem)] leading-[1.08] tracking-[-0.04em]">
             Install the skill.
           </h3>
           <p className="m-0 text-fg-muted leading-[1.72] max-w-[40rem]">
-            Install the public skill if you want your agent to keep provider
-            routing explicit and jump straight to the right reference guide.
+            agent-ads ships as a skill for Claude Code. Install the CLI, add the
+            skill, and your agent can query any supported ad platform on your
+            behalf.
           </p>
           <CodeBlock
-            code={skillInstallCommand}
+            code="$ npx skills add https://github.com/bengoism/agent-ads --skill agent-ads"
             language="bash"
             showHeader={false}
             copyable={true}
           />
           <div>
             <Link className={btnSecondary} to="/skills">
-              Open the skill guide &rarr;
+              View skill setup &rarr;
             </Link>
           </div>
         </article>
       </section>
 
-      {/* ── Supported Providers ─────────────────────────── */}
+      {/* ── Supported Engines ────────────────────────────── */}
       <section className="grid gap-6">
         <SectionHeader
-          eyebrow="Supported Providers"
-          title="Supported Providers"
-          copy="Read-only coverage for each supported ad provider."
+          eyebrow="Supported Platforms"
+          title="Supported Platforms"
+          copy="Native integration with world-class advertising APIs."
         />
 
         <div className="grid grid-cols-1 md:grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-3">
