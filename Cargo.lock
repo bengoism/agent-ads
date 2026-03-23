@@ -32,6 +32,7 @@ version = "0.8.0"
 dependencies = [
  "csv",
  "flate2",
+ "httpdate",
  "keyring",
  "reqwest",
  "reqwest-oauth1",

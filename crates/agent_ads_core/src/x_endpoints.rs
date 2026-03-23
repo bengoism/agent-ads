@@ -86,11 +86,14 @@ pub mod account_scoped {
         params: &[(String, String)],
         fetch_all: bool,
         max_items: Option<usize>,
+        with_deleted: Option<bool>,
     ) -> XResult<XResponse> {
+        let mut params = params.to_vec();
+        with_optional_bool(&mut params, "with_deleted", with_deleted);
         client
             .get_list(
                 &format!("accounts/{account_id}/{resource_path}"),
-                params,
+                &params,
                 fetch_all,
                 max_items,
             )
@@ -103,11 +106,14 @@ pub mod account_scoped {
         resource_path: &str,
         resource_id: &str,
         params: &[(String, String)],
+        with_deleted: Option<bool>,
     ) -> XResult<XResponse> {
+        let mut params = params.to_vec();
+        with_optional_bool(&mut params, "with_deleted", with_deleted);
         client
             .get_object(
                 &format!("accounts/{account_id}/{resource_path}/{resource_id}"),
-                params,
+                &params,
             )
             .await
     }

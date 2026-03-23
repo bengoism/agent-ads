@@ -1,8 +1,9 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{io::Cursor, io::Read};
 
 use flate2::read::GzDecoder;
-use reqwest::Method;
+use reqwest::header::{HeaderMap, RETRY_AFTER};
+use reqwest::{Method, StatusCode};
 use reqwest_oauth1::{Error as OAuthRequestError, OAuthClientProvider, Secrets};
 use serde_json::{json, Value};
 use tokio::time::sleep;
@@ -191,6 +192,7 @@ impl XClient {
                         .or_else(|| response.headers().get("x-correlation-id"))
                         .and_then(|value| value.to_str().ok())
                         .map(str::to_string);
+                    let headers = response.headers().clone();
                     let status = response.status();
                     let response_body = response.text().await?;
 
@@ -201,9 +203,15 @@ impl XClient {
 
                     let api_error = parse_x_api_error(status.as_u16(), request_id, &response_body);
                     if api_error.retryable() && attempt < self.max_retries {
-                        let delay_ms = 250_u64 * 2_u64.pow(attempt as u32);
+                        let delay = retry_delay_for_api_response(
+                            &headers,
+                            status,
+                            attempt,
+                            SystemTime::now(),
+                        );
+                        let delay_ms = delay.as_millis();
                         debug!(attempt, delay_ms, "retrying x ads api request");
-                        sleep(Duration::from_millis(delay_ms)).await;
+                        sleep(delay).await;
                         last_error = Some(XError::Api(api_error));
                         continue;
                     }
@@ -279,6 +287,53 @@ fn replace_query_param(
     next
 }
 
+fn retry_delay_for_api_response(
+    headers: &HeaderMap,
+    status: StatusCode,
+    attempt: usize,
+    now: SystemTime,
+) -> Duration {
+    match status {
+        StatusCode::TOO_MANY_REQUESTS => parse_rate_limit_reset(headers, now),
+        StatusCode::SERVICE_UNAVAILABLE => parse_retry_after(headers, now),
+        _ => None,
+    }
+    .unwrap_or_else(|| default_retry_delay(attempt))
+}
+
+fn default_retry_delay(attempt: usize) -> Duration {
+    Duration::from_millis(250_u64 * 2_u64.pow(attempt as u32))
+}
+
+fn parse_rate_limit_reset(headers: &HeaderMap, now: SystemTime) -> Option<Duration> {
+    let now_epoch = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+
+    ["x-account-rate-limit-reset", "x-rate-limit-reset"]
+        .iter()
+        .filter_map(|header_name| {
+            headers
+                .get(*header_name)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.trim().parse::<u64>().ok())
+        })
+        .next()
+        .map(|reset_at| Duration::from_secs(reset_at.saturating_sub(now_epoch)))
+}
+
+fn parse_retry_after(headers: &HeaderMap, now: SystemTime) -> Option<Duration> {
+    let value = headers.get(RETRY_AFTER)?.to_str().ok()?.trim();
+
+    if let Ok(seconds) = value.parse::<u64>() {
+        return Some(Duration::from_secs(seconds));
+    }
+
+    let retry_at = httpdate::parse_http_date(value).ok()?;
+    Some(match retry_at.duration_since(now) {
+        Ok(delay) => delay,
+        Err(_) => Duration::ZERO,
+    })
+}
+
 enum RetryDecision {
     Retry(XError),
     Fail(XError),
@@ -294,5 +349,144 @@ fn map_request_error(error: OAuthRequestError) -> RetryDecision {
             }
         }
         other => RetryDecision::Fail(XError::Config(other.to_string())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        default_retry_delay, parse_rate_limit_reset, parse_retry_after,
+        retry_delay_for_api_response, XClient,
+    };
+    use crate::output::OutputFormat;
+    use crate::x_config::XResolvedConfig;
+    use httpdate::fmt_http_date;
+    use reqwest::header::{HeaderMap, HeaderValue, RETRY_AFTER};
+    use reqwest::StatusCode;
+    use serde_json::json;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn test_config(base_url: &str) -> XResolvedConfig {
+        XResolvedConfig {
+            consumer_key: "consumer-key".to_string(),
+            consumer_secret: "consumer-secret".to_string(),
+            access_token: "access-token".to_string(),
+            access_token_secret: "access-token-secret".to_string(),
+            api_base_url: base_url.to_string(),
+            api_version: "12".to_string(),
+            timeout_seconds: 10,
+            default_account_id: None,
+            output_format: OutputFormat::Json,
+            config_path: "agent-ads.config.json".into(),
+        }
+    }
+
+    #[test]
+    fn prefers_account_rate_limit_reset_for_429() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-account-rate-limit-reset",
+            HeaderValue::from_static("1005"),
+        );
+        headers.insert("x-rate-limit-reset", HeaderValue::from_static("1010"));
+
+        let now = UNIX_EPOCH + Duration::from_secs(1000);
+        assert_eq!(
+            parse_rate_limit_reset(&headers, now),
+            Some(Duration::from_secs(5))
+        );
+    }
+
+    #[test]
+    fn falls_back_to_global_rate_limit_reset_for_429() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-account-rate-limit-reset",
+            HeaderValue::from_static("invalid"),
+        );
+        headers.insert("x-rate-limit-reset", HeaderValue::from_static("1007"));
+
+        let now = UNIX_EPOCH + Duration::from_secs(1000);
+        assert_eq!(
+            parse_rate_limit_reset(&headers, now),
+            Some(Duration::from_secs(7))
+        );
+    }
+
+    #[test]
+    fn uses_retry_after_seconds_for_503() {
+        let mut headers = HeaderMap::new();
+        headers.insert(RETRY_AFTER, HeaderValue::from_static("12"));
+
+        let now = UNIX_EPOCH + Duration::from_secs(1000);
+        assert_eq!(
+            parse_retry_after(&headers, now),
+            Some(Duration::from_secs(12))
+        );
+    }
+
+    #[test]
+    fn uses_retry_after_http_date_for_503() {
+        let now = UNIX_EPOCH + Duration::from_secs(1000);
+        let retry_at = now + Duration::from_secs(30);
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            RETRY_AFTER,
+            HeaderValue::from_str(&fmt_http_date(retry_at)).unwrap(),
+        );
+
+        assert_eq!(
+            parse_retry_after(&headers, now),
+            Some(Duration::from_secs(30))
+        );
+    }
+
+    #[test]
+    fn falls_back_to_exponential_backoff_when_headers_are_missing_or_invalid() {
+        let mut invalid_headers = HeaderMap::new();
+        invalid_headers.insert("x-rate-limit-reset", HeaderValue::from_static("invalid"));
+        invalid_headers.insert(RETRY_AFTER, HeaderValue::from_static("nope"));
+
+        let now = UNIX_EPOCH + Duration::from_secs(1000);
+        assert_eq!(
+            retry_delay_for_api_response(&HeaderMap::new(), StatusCode::TOO_MANY_REQUESTS, 2, now,),
+            default_retry_delay(2)
+        );
+        assert_eq!(
+            retry_delay_for_api_response(&invalid_headers, StatusCode::SERVICE_UNAVAILABLE, 1, now,),
+            default_retry_delay(1)
+        );
+    }
+
+    #[tokio::test]
+    async fn retries_rate_limited_requests_until_budget_exhausted() {
+        let server = MockServer::start().await;
+        let reset_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .saturating_sub(1);
+
+        Mock::given(method("GET"))
+            .and(path("/12/accounts"))
+            .respond_with(
+                ResponseTemplate::new(429)
+                    .insert_header("x-rate-limit-reset", reset_at.to_string())
+                    .set_body_json(json!({
+                        "errors": [{
+                            "message": "rate limited"
+                        }]
+                    })),
+            )
+            .expect(5)
+            .mount(&server)
+            .await;
+
+        let client = XClient::from_config(&test_config(&server.uri())).unwrap();
+        let error = client.get_object("accounts", &[]).await.unwrap_err();
+
+        assert_eq!(error.exit_code(), 8);
     }
 }

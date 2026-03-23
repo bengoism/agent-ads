@@ -3522,7 +3522,7 @@ mod tests {
 
         let cards_get_help = nested_help(&["x", "cards", "get"]);
         assert!(cards_get_help.contains("--card-id"));
-        assert!(!cards_get_help.contains("--card-uri"));
+        assert!(cards_get_help.contains("--card-uri"));
 
         let draft_tweets_get_help = nested_help(&["x", "draft-tweets", "get"]);
         assert!(draft_tweets_get_help.contains("--draft-tweet-id"));
@@ -3543,5 +3543,29 @@ mod tests {
         let scheduled_tweets_list_help = nested_help(&["x", "scheduled-tweets", "list"]);
         assert!(scheduled_tweets_list_help.contains("--user-id"));
         assert!(!scheduled_tweets_list_help.contains("--scheduled-tweet-id"));
+    }
+
+    #[test]
+    fn x_deleted_entity_commands_expose_with_deleted() {
+        let campaigns_list_help = nested_help(&["x", "campaigns", "list"]);
+        assert!(campaigns_list_help.contains("--with-deleted"));
+
+        let promoted_tweets_get_help = nested_help(&["x", "promoted-tweets", "get"]);
+        assert!(promoted_tweets_get_help.contains("--with-deleted"));
+
+        let cards_get_help = nested_help(&["x", "cards", "get"]);
+        assert!(cards_get_help.contains("--with-deleted"));
+    }
+
+    #[test]
+    fn x_non_deleted_commands_do_not_expose_with_deleted() {
+        let media_library_list_help = nested_help(&["x", "media-library", "list"]);
+        assert!(!media_library_list_help.contains("--with-deleted"));
+
+        let draft_tweets_get_help = nested_help(&["x", "draft-tweets", "get"]);
+        assert!(!draft_tweets_get_help.contains("--with-deleted"));
+
+        let analytics_query_help = nested_help(&["x", "analytics", "query"]);
+        assert!(!analytics_query_help.contains("--with-deleted"));
     }
 }

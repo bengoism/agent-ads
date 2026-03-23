@@ -392,6 +392,15 @@ pub struct AccountSelectorArgs {
     pub account_id: Option<String>,
 }
 
+#[derive(Args, Debug, Clone, Default)]
+pub struct WithDeletedArgs {
+    #[arg(
+        long = "with-deleted",
+        help = "Include deleted resources when the X Ads API supports it"
+    )]
+    pub with_deleted: bool,
+}
+
 #[derive(Args, Debug, Clone)]
 pub struct AccountsListArgs {
     #[arg(
@@ -400,8 +409,8 @@ pub struct AccountsListArgs {
         help = "Filter to one or more account IDs"
     )]
     pub account_ids: Vec<String>,
-    #[arg(long = "with-deleted", help = "Include deleted accounts if supported")]
-    pub with_deleted: bool,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[command(flatten)]
     pub pagination: XPaginationArgs,
 }
@@ -410,8 +419,8 @@ pub struct AccountsListArgs {
 pub struct AccountGetArgs {
     #[arg(long = "account-id", help = "X ads account ID")]
     pub account_id: String,
-    #[arg(long = "with-deleted", help = "Include deleted accounts if supported")]
-    pub with_deleted: bool,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -424,6 +433,8 @@ pub struct AuthenticatedUserAccessGetArgs {
 pub struct CampaignListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "campaign-id",
         value_delimiter = ',',
@@ -444,6 +455,8 @@ pub struct CampaignListArgs {
 pub struct CampaignGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "campaign-id", help = "Campaign ID")]
     pub campaign_id: String,
 }
@@ -452,6 +465,8 @@ pub struct CampaignGetArgs {
 pub struct LineItemListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "line-item-id",
         value_delimiter = ',',
@@ -472,6 +487,8 @@ pub struct LineItemListArgs {
 pub struct LineItemGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "line-item-id", help = "Line item ID")]
     pub line_item_id: String,
 }
@@ -480,6 +497,8 @@ pub struct LineItemGetArgs {
 pub struct FundingInstrumentListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "funding-instrument-id",
         value_delimiter = ',',
@@ -494,6 +513,8 @@ pub struct FundingInstrumentListArgs {
 pub struct FundingInstrumentGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "funding-instrument-id", help = "Funding instrument ID")]
     pub funding_instrument_id: String,
 }
@@ -502,6 +523,8 @@ pub struct FundingInstrumentGetArgs {
 pub struct PromotableUserListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "user-id", value_delimiter = ',', help = "Filter user IDs")]
     pub user_ids: Vec<String>,
     #[command(flatten)]
@@ -512,6 +535,8 @@ pub struct PromotableUserListArgs {
 pub struct PromotableUserGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "user-id", help = "Promotable user ID")]
     pub user_id: String,
 }
@@ -520,6 +545,8 @@ pub struct PromotableUserGetArgs {
 pub struct PromotedAccountListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "promoted-account-id",
         value_delimiter = ',',
@@ -540,6 +567,8 @@ pub struct PromotedAccountListArgs {
 pub struct PromotedAccountGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "promoted-account-id", help = "Promoted account ID")]
     pub promoted_account_id: String,
 }
@@ -548,6 +577,8 @@ pub struct PromotedAccountGetArgs {
 pub struct PromotedTweetListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "promoted-tweet-id",
         value_delimiter = ',',
@@ -570,6 +601,8 @@ pub struct PromotedTweetListArgs {
 pub struct PromotedTweetGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "promoted-tweet-id", help = "Promoted tweet ID")]
     pub promoted_tweet_id: String,
 }
@@ -578,6 +611,8 @@ pub struct PromotedTweetGetArgs {
 pub struct TargetingCriterionListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "targeting-criterion-id",
         value_delimiter = ',',
@@ -598,6 +633,8 @@ pub struct TargetingCriterionListArgs {
 pub struct TargetingCriterionGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "targeting-criterion-id", help = "Targeting criterion ID")]
     pub targeting_criterion_id: String,
 }
@@ -606,6 +643,8 @@ pub struct TargetingCriterionGetArgs {
 pub struct AccountAppListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "account-app-id",
         value_delimiter = ',',
@@ -620,6 +659,8 @@ pub struct AccountAppListArgs {
 pub struct AccountAppGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "account-app-id", help = "Account app ID")]
     pub account_app_id: String,
 }
@@ -628,6 +669,8 @@ pub struct AccountAppGetArgs {
 pub struct AccountMediaListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "account-media-id",
         value_delimiter = ',',
@@ -642,6 +685,8 @@ pub struct AccountMediaListArgs {
 pub struct AccountMediaGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "account-media-id", help = "Account media ID")]
     pub account_media_id: String,
 }
@@ -673,6 +718,8 @@ pub struct MediaLibraryGetArgs {
 pub struct CardListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "card-id", value_delimiter = ',', help = "Filter card IDs")]
     pub card_ids: Vec<String>,
     #[arg(long = "card-uri", value_delimiter = ',', help = "Filter card URIs")]
@@ -685,8 +732,22 @@ pub struct CardListArgs {
 pub struct CardGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
-    #[arg(long = "card-id", help = "Card ID")]
-    pub card_id: String,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
+    #[arg(
+        long = "card-id",
+        conflicts_with = "card_uri",
+        required_unless_present = "card_uri",
+        help = "Card ID"
+    )]
+    pub card_id: Option<String>,
+    #[arg(
+        long = "card-uri",
+        conflicts_with = "card_id",
+        required_unless_present = "card_id",
+        help = "Card URI"
+    )]
+    pub card_uri: Option<String>,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -742,6 +803,8 @@ pub struct ScopedTimelineListArgs {
 pub struct CustomAudienceListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "custom-audience-id",
         value_delimiter = ',',
@@ -756,6 +819,8 @@ pub struct CustomAudienceListArgs {
 pub struct CustomAudienceGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "custom-audience-id", help = "Custom audience ID")]
     pub custom_audience_id: String,
 }
@@ -764,6 +829,8 @@ pub struct CustomAudienceGetArgs {
 pub struct DoNotReachListListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "do-not-reach-list-id",
         value_delimiter = ',',
@@ -778,6 +845,8 @@ pub struct DoNotReachListListArgs {
 pub struct DoNotReachListGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "do-not-reach-list-id", help = "Do-not-reach list ID")]
     pub do_not_reach_list_id: String,
 }
@@ -786,6 +855,8 @@ pub struct DoNotReachListGetArgs {
 pub struct WebEventTagListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "web-event-tag-id",
         value_delimiter = ',',
@@ -800,6 +871,8 @@ pub struct WebEventTagListArgs {
 pub struct WebEventTagGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "web-event-tag-id", help = "Web event tag ID")]
     pub web_event_tag_id: String,
 }
@@ -808,6 +881,8 @@ pub struct WebEventTagGetArgs {
 pub struct AppListListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "app-list-id",
         value_delimiter = ',',
@@ -822,6 +897,8 @@ pub struct AppListListArgs {
 pub struct AppListGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "app-list-id", help = "App list ID")]
     pub app_list_id: String,
 }
@@ -830,6 +907,8 @@ pub struct AppListGetArgs {
 pub struct AbTestListArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(
         long = "ab-test-id",
         value_delimiter = ',',
@@ -844,6 +923,8 @@ pub struct AbTestListArgs {
 pub struct AbTestGetArgs {
     #[command(flatten)]
     pub selector: AccountSelectorArgs,
+    #[command(flatten)]
+    pub deleted: WithDeletedArgs,
     #[arg(long = "ab-test-id", help = "AB test ID")]
     pub ab_test_id: String,
 }
@@ -1373,7 +1454,7 @@ pub async fn dispatch_x_with_client(
                     &args.account_ids,
                     args.pagination.cursor.as_deref(),
                     args.pagination.page_size,
-                    args.with_deleted.then_some(true),
+                    args.deleted.with_deleted.then_some(true),
                     args.pagination.all,
                     args.pagination.max_items,
                 )
@@ -1384,7 +1465,7 @@ pub async fn dispatch_x_with_client(
                 let response = accounts::get_account(
                     client,
                     &args.account_id,
-                    args.with_deleted.then_some(true),
+                    args.deleted.with_deleted.then_some(true),
                 )
                 .await?;
                 Ok(x_result(
@@ -1422,6 +1503,7 @@ pub async fn dispatch_x_with_client(
                         ("campaign_ids", &args.campaign_ids),
                         ("funding_instrument_ids", &args.funding_instrument_ids),
                     ],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1432,7 +1514,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "campaigns",
                     &args.campaign_id,
+                    &[],
                     "/x/campaigns/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1450,6 +1534,7 @@ pub async fn dispatch_x_with_client(
                         ("line_item_ids", &args.line_item_ids),
                         ("campaign_ids", &args.campaign_ids),
                     ],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1460,7 +1545,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "line_items",
                     &args.line_item_id,
+                    &[],
                     "/x/line-items/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1475,6 +1562,7 @@ pub async fn dispatch_x_with_client(
                     "/x/funding-instruments/list",
                     &args.collection,
                     &[("funding_instrument_ids", &args.funding_instrument_ids)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1485,7 +1573,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "funding_instruments",
                     &args.funding_instrument_id,
+                    &[],
                     "/x/funding-instruments/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1500,6 +1590,7 @@ pub async fn dispatch_x_with_client(
                     "/x/promotable-users/list",
                     &args.collection,
                     &[("user_ids", &args.user_ids)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1510,7 +1601,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "promotable_users",
                     &args.user_id,
+                    &[],
                     "/x/promotable-users/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1528,6 +1621,7 @@ pub async fn dispatch_x_with_client(
                         ("promoted_account_ids", &args.promoted_account_ids),
                         ("line_item_ids", &args.line_item_ids),
                     ],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1538,7 +1632,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "promoted_accounts",
                     &args.promoted_account_id,
+                    &[],
                     "/x/promoted-accounts/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1557,6 +1653,7 @@ pub async fn dispatch_x_with_client(
                         ("line_item_ids", &args.line_item_ids),
                         ("tweet_ids", &args.tweet_ids),
                     ],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1567,7 +1664,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "promoted_tweets",
                     &args.promoted_tweet_id,
+                    &[],
                     "/x/promoted-tweets/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1585,6 +1684,7 @@ pub async fn dispatch_x_with_client(
                         ("targeting_criterion_ids", &args.targeting_criterion_ids),
                         ("line_item_ids", &args.line_item_ids),
                     ],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1595,7 +1695,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "targeting_criteria",
                     &args.targeting_criterion_id,
+                    &[],
                     "/x/targeting-criteria/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1610,6 +1712,7 @@ pub async fn dispatch_x_with_client(
                     "/x/account-apps/list",
                     &args.collection,
                     &[("account_app_ids", &args.account_app_ids)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1620,7 +1723,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "account_apps",
                     &args.account_app_id,
+                    &[],
                     "/x/account-apps/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1635,6 +1740,7 @@ pub async fn dispatch_x_with_client(
                     "/x/account-media/list",
                     &args.collection,
                     &[("account_media_ids", &args.account_media_ids)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1645,7 +1751,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "account_media",
                     &args.account_media_id,
+                    &[],
                     "/x/account-media/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1668,6 +1776,7 @@ pub async fn dispatch_x_with_client(
                     &params,
                     args.collection.pagination.all,
                     args.collection.pagination.max_items,
+                    None,
                 )
                 .await?;
                 Ok(x_result(
@@ -1685,7 +1794,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "media_library",
                     &args.media_key,
+                    &[],
                     "/x/media-library/get",
+                    false,
                 )
                 .await
             }
@@ -1696,24 +1807,15 @@ pub async fn dispatch_x_with_client(
                     client,
                     config,
                     args.selector.account_id.as_deref(),
-                    "cards",
+                    "cards/all",
                     "/x/cards/list",
                     &args.collection,
                     &[("card_ids", &args.card_ids), ("card_uris", &args.card_uris)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
-            CardsCommand::Get(args) => {
-                get_account_resource(
-                    client,
-                    config,
-                    args.selector.account_id.as_deref(),
-                    "cards",
-                    &args.card_id,
-                    "/x/cards/get",
-                )
-                .await
-            }
+            CardsCommand::Get(args) => get_card_resource(client, config, args).await,
         },
         XCommand::DraftTweets { command } => match command {
             DraftTweetsCommand::List(args) => {
@@ -1730,6 +1832,7 @@ pub async fn dispatch_x_with_client(
                     &params,
                     args.collection.pagination.all,
                     args.collection.pagination.max_items,
+                    None,
                 )
                 .await?;
                 Ok(x_result(
@@ -1747,7 +1850,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "draft_tweets",
                     &args.draft_tweet_id,
+                    &[],
                     "/x/draft-tweets/get",
+                    false,
                 )
                 .await
             }
@@ -1767,6 +1872,7 @@ pub async fn dispatch_x_with_client(
                     &params,
                     args.collection.pagination.all,
                     args.collection.pagination.max_items,
+                    None,
                 )
                 .await?;
                 Ok(x_result(
@@ -1784,7 +1890,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "scheduled_tweets",
                     &args.scheduled_tweet_id,
+                    &[],
                     "/x/scheduled-tweets/get",
+                    false,
                 )
                 .await
             }
@@ -1799,6 +1907,7 @@ pub async fn dispatch_x_with_client(
                     "/x/scoped-timeline/list",
                     &args.collection,
                     &[("tweet_ids", &args.tweet_ids)],
+                    false,
                 )
                 .await
             }
@@ -1813,6 +1922,7 @@ pub async fn dispatch_x_with_client(
                     "/x/custom-audiences/list",
                     &args.collection,
                     &[("custom_audience_ids", &args.custom_audience_ids)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1823,7 +1933,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "custom_audiences",
                     &args.custom_audience_id,
+                    &[],
                     "/x/custom-audiences/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1838,6 +1950,7 @@ pub async fn dispatch_x_with_client(
                     "/x/do-not-reach-lists/list",
                     &args.collection,
                     &[("do_not_reach_list_ids", &args.do_not_reach_list_ids)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1848,7 +1961,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "do_not_reach_lists",
                     &args.do_not_reach_list_id,
+                    &[],
                     "/x/do-not-reach-lists/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1863,6 +1978,7 @@ pub async fn dispatch_x_with_client(
                     "/x/web-event-tags/list",
                     &args.collection,
                     &[("web_event_tag_ids", &args.web_event_tag_ids)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1873,7 +1989,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "web_event_tags",
                     &args.web_event_tag_id,
+                    &[],
                     "/x/web-event-tags/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1888,6 +2006,7 @@ pub async fn dispatch_x_with_client(
                     "/x/app-lists/list",
                     &args.collection,
                     &[("app_list_ids", &args.app_list_ids)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1898,7 +2017,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "app_lists",
                     &args.app_list_id,
+                    &[],
                     "/x/app-lists/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1913,6 +2034,7 @@ pub async fn dispatch_x_with_client(
                     "/x/ab-tests/list",
                     &args.collection,
                     &[("ab_test_ids", &args.ab_test_ids)],
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1923,7 +2045,9 @@ pub async fn dispatch_x_with_client(
                     args.selector.account_id.as_deref(),
                     "ab_tests",
                     &args.ab_test_id,
+                    &[],
                     "/x/ab-tests/get",
+                    args.deleted.with_deleted,
                 )
                 .await
             }
@@ -1994,6 +2118,7 @@ async fn list_account_resource(
     endpoint: &str,
     collection: &XCollectionArgs,
     joined_params: &[(&str, &Vec<String>)],
+    with_deleted: bool,
 ) -> Result<CommandResult, XError> {
     let account_id = resolve_account_id(config, explicit_account_id)?;
     let mut params = collection_params(collection);
@@ -2008,6 +2133,7 @@ async fn list_account_resource(
         &params,
         collection.pagination.all,
         collection.pagination.max_items,
+        with_deleted.then_some(true),
     )
     .await?;
     Ok(x_result(
@@ -2025,11 +2151,20 @@ async fn get_account_resource(
     explicit_account_id: Option<&str>,
     resource_path: &str,
     resource_id: &str,
+    params: &[(String, String)],
     endpoint: &str,
+    with_deleted: bool,
 ) -> Result<CommandResult, XError> {
     let account_id = resolve_account_id(config, explicit_account_id)?;
-    let response =
-        account_scoped::get_resource(client, &account_id, resource_path, resource_id, &[]).await?;
+    let response = account_scoped::get_resource(
+        client,
+        &account_id,
+        resource_path,
+        resource_id,
+        params,
+        with_deleted.then_some(true),
+    )
+    .await?;
     Ok(x_result(
         client,
         response,
@@ -2037,6 +2172,69 @@ async fn get_account_resource(
         Some(account_id),
         vec![],
     ))
+}
+
+async fn get_card_resource(
+    client: &XClient,
+    config: &XResolvedConfig,
+    args: CardGetArgs,
+) -> Result<CommandResult, XError> {
+    let account_id = resolve_account_id(config, args.selector.account_id.as_deref())?;
+    let with_deleted = args.deleted.with_deleted.then_some(true);
+    let response = if let Some(card_id) = args.card_id.as_deref() {
+        account_scoped::get_resource(client, &account_id, "cards/all", card_id, &[], with_deleted)
+            .await?
+    } else {
+        let card_uri = args.card_uri.as_deref().ok_or_else(|| {
+            XError::InvalidArgument("card ID or card URI is required".to_string())
+        })?;
+        let response = account_scoped::list_resource(
+            client,
+            &account_id,
+            "cards/all",
+            &[("card_uris".to_string(), card_uri.to_string())],
+            false,
+            Some(2),
+            with_deleted,
+        )
+        .await?;
+        expect_single_resource(response, "card URI", card_uri)?
+    };
+
+    Ok(x_result(
+        client,
+        response,
+        "/x/cards/get",
+        Some(account_id),
+        vec![],
+    ))
+}
+
+fn expect_single_resource(
+    response: XResponse,
+    identifier_label: &str,
+    identifier_value: &str,
+) -> Result<XResponse, XError> {
+    let XResponse {
+        data, request_id, ..
+    } = response;
+
+    match data {
+        Value::Array(mut items) if items.len() == 1 => Ok(XResponse {
+            data: items.pop().unwrap_or(Value::Null),
+            paging: None,
+            request_id,
+        }),
+        Value::Array(items) if items.is_empty() => Err(XError::InvalidArgument(format!(
+            "no card returned for {identifier_label} {identifier_value}"
+        ))),
+        Value::Array(_) => Err(XError::InvalidArgument(format!(
+            "multiple cards returned for {identifier_label} {identifier_value}"
+        ))),
+        _ => Err(XError::Config(format!(
+            "unexpected X Ads response while resolving {identifier_label} {identifier_value}"
+        ))),
+    }
 }
 
 async fn dispatch_sync_analytics(
@@ -2682,9 +2880,30 @@ fn job_is_failure(status: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_exclusive_filters, parse_auth_inputs_from_stdin, validate_analytics_times,
-        validate_async_job_range,
+        dispatch_x_with_client, ensure_exclusive_filters, parse_auth_inputs_from_stdin,
+        validate_analytics_times, validate_async_job_range, AccountSelectorArgs, CampaignListArgs,
+        CampaignsCommand, CardGetArgs, CardsCommand, WithDeletedArgs, XCollectionArgs, XCommand,
     };
+    use agent_ads_core::output::OutputFormat;
+    use agent_ads_core::{XClient, XResolvedConfig};
+    use serde_json::json;
+    use wiremock::matchers::{method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn test_config(base_url: &str) -> XResolvedConfig {
+        XResolvedConfig {
+            consumer_key: "consumer-key".to_string(),
+            consumer_secret: "consumer-secret".to_string(),
+            access_token: "access-token".to_string(),
+            access_token_secret: "access-token-secret".to_string(),
+            api_base_url: base_url.to_string(),
+            api_version: "12".to_string(),
+            timeout_seconds: 10,
+            default_account_id: None,
+            output_format: OutputFormat::Json,
+            config_path: "agent-ads.config.json".into(),
+        }
+    }
 
     #[test]
     fn parses_stdin_auth_inputs() {
@@ -2730,5 +2949,120 @@ mod tests {
             .unwrap_err();
 
         assert!(error.to_string().contains("at most one"));
+    }
+
+    #[tokio::test]
+    async fn campaigns_list_forwards_with_deleted() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/12/accounts/18ce54d4x5t/campaigns"))
+            .and(query_param("with_deleted", "true"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [{ "id": "cmp_1" }]
+            })))
+            .mount(&server)
+            .await;
+
+        let config = test_config(&server.uri());
+        let client = XClient::from_config(&config).unwrap();
+        let result = dispatch_x_with_client(
+            &client,
+            &config,
+            XCommand::Campaigns {
+                command: CampaignsCommand::List(CampaignListArgs {
+                    selector: AccountSelectorArgs {
+                        account_id: Some("18ce54d4x5t".to_string()),
+                    },
+                    deleted: WithDeletedArgs { with_deleted: true },
+                    campaign_ids: Vec::new(),
+                    funding_instrument_ids: Vec::new(),
+                    collection: XCollectionArgs::default(),
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.envelope.data, json!([{ "id": "cmp_1" }]));
+    }
+
+    #[tokio::test]
+    async fn cards_get_by_id_uses_cards_all_path() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/12/accounts/18ce54d4x5t/cards/all/card123"))
+            .and(query_param("with_deleted", "true"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": { "id": "card123" }
+            })))
+            .mount(&server)
+            .await;
+
+        let config = test_config(&server.uri());
+        let client = XClient::from_config(&config).unwrap();
+        let result = dispatch_x_with_client(
+            &client,
+            &config,
+            XCommand::Cards {
+                command: CardsCommand::Get(CardGetArgs {
+                    selector: AccountSelectorArgs {
+                        account_id: Some("18ce54d4x5t".to_string()),
+                    },
+                    deleted: WithDeletedArgs { with_deleted: true },
+                    card_id: Some("card123".to_string()),
+                    card_uri: None,
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.envelope.data, json!({ "id": "card123" }));
+    }
+
+    #[tokio::test]
+    async fn cards_get_by_uri_uses_cards_all_lookup() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/12/accounts/18ce54d4x5t/cards/all"))
+            .and(query_param("card_uris", "card://123"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [{
+                    "id": "card123",
+                    "card_uri": "card://123"
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let config = test_config(&server.uri());
+        let client = XClient::from_config(&config).unwrap();
+        let result = dispatch_x_with_client(
+            &client,
+            &config,
+            XCommand::Cards {
+                command: CardsCommand::Get(CardGetArgs {
+                    selector: AccountSelectorArgs {
+                        account_id: Some("18ce54d4x5t".to_string()),
+                    },
+                    deleted: WithDeletedArgs::default(),
+                    card_id: None,
+                    card_uri: Some("card://123".to_string()),
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.envelope.data,
+            json!({
+                "id": "card123",
+                "card_uri": "card://123"
+            })
+        );
     }
 }
