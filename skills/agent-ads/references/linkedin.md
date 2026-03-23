@@ -53,6 +53,15 @@ LinkedIn list commands use cursor pagination:
 | `--all` | Follow all pages |
 | `--max-items <n>` | Stop after N items |
 
+LinkedIn report queries use offset pagination:
+
+| Flag | Meaning |
+|------|---------|
+| `--start <n>` | Start offset for the first report page |
+| `--page-size <n>` / `--count <n>` | Rows per API request |
+| `--all` | Follow all report pages |
+| `--max-items <n>` | Stop after N report rows |
+
 ## Reporting Finder Rules
 
 - `--finder analytics`: exactly one `--pivot`, requires `--time-granularity`

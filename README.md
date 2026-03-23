@@ -699,6 +699,8 @@ Default output is **data-only JSON** on stdout. Errors are JSON on stderr.
 
 Pagination differs by provider (`--all` auto-follows all pages for every provider). Run `agent-ads <provider> --help` for provider-specific flags.
 
+For LinkedIn report queries, `linkedin analytics query` uses offset paging: `--start` selects the first row offset, `--page-size` (alias `--count`) controls rows per request, `--all` follows every page, and `--max-items` caps the collected rows.
+
 ### Exit codes
 
 | Code | Meaning |

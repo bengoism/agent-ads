@@ -276,8 +276,12 @@ fn resolve_access_token(secret_store: &dyn SecretStore) -> LinkedInAccessTokenRe
 }
 
 fn load_linkedin_file_config(path: &Path) -> LinkedInResult<LinkedInFileConfig> {
-    let config = load_root_file_config(path)?;
-    Ok(config.providers.linkedin.unwrap_or_default())
+    let root = load_root_file_config(path)?;
+    let mut config = root.providers.linkedin.unwrap_or_default();
+    if config.output_format.is_none() {
+        config.output_format = root.legacy_meta.output_format;
+    }
+    Ok(config)
 }
 
 fn missing_access_token_error(auth: &LinkedInAuthSnapshot) -> LinkedInError {

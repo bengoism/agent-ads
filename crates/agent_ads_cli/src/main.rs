@@ -3182,6 +3182,13 @@ mod tests {
             "2026-03-07",
             "--fields",
             "impressions,clicks",
+            "--start",
+            "20",
+            "--page-size",
+            "50",
+            "--all",
+            "--max-items",
+            "120",
         ])
         .unwrap();
         let debug = format!("{cli:?}");
@@ -3200,6 +3207,30 @@ mod tests {
         fs::write(
             &path,
             r#"{"providers":{"linkedin":{"output_format":"csv"}}}"#,
+        )
+        .unwrap();
+
+        let format = resolve_linkedin_output_format(
+            Some(&path),
+            &store,
+            &LinkedInConfigOverrides::default(),
+        )
+        .unwrap();
+
+        assert_eq!(format, OutputFormat::Csv);
+    }
+
+    #[test]
+    fn linkedin_output_format_uses_root_config_default() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var("LINKEDIN_ADS_OUTPUT_FORMAT");
+
+        let store = FakeSecretStore::default();
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("agent-ads.config.json");
+        fs::write(
+            &path,
+            r#"{"output_format":"csv","providers":{"linkedin":{}}}"#,
         )
         .unwrap();
 

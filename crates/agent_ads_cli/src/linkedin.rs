@@ -163,6 +163,18 @@ pub struct LinkedInPaginationArgs {
     pub max_items: Option<usize>,
 }
 
+#[derive(Args, Debug, Clone, Default)]
+pub struct LinkedInReportPaginationArgs {
+    #[arg(long, help = "Starting offset for the first page")]
+    pub start: Option<u32>,
+    #[arg(long = "page-size", alias = "count", help = "Rows per API request")]
+    pub page_size: Option<u32>,
+    #[arg(long, help = "Auto-follow all available pages")]
+    pub all: bool,
+    #[arg(long = "max-items", help = "Stop after collecting N total rows")]
+    pub max_items: Option<usize>,
+}
+
 #[derive(Args, Debug, Clone)]
 pub struct AccountSelectorArgs {
     #[arg(
@@ -380,6 +392,8 @@ pub struct AnalyticsQueryArgs {
         help = "Filter by creative IDs or URNs"
     )]
     pub creative_ids: Vec<String>,
+    #[command(flatten)]
+    pub pagination: LinkedInReportPaginationArgs,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -1117,6 +1131,10 @@ struct ValidatedAnalyticsQuery {
     campaign_group_ids: Vec<String>,
     creative_ids: Vec<String>,
     fields: Vec<String>,
+    start: Option<u32>,
+    page_size: Option<u32>,
+    fetch_all: bool,
+    max_items: Option<usize>,
 }
 
 impl ValidatedAnalyticsQuery {
@@ -1131,6 +1149,10 @@ impl ValidatedAnalyticsQuery {
             campaign_group_ids: &self.campaign_group_ids,
             creative_ids: &self.creative_ids,
             fields: &self.fields,
+            start: self.start,
+            page_size: self.page_size,
+            fetch_all: self.fetch_all,
+            max_items: self.max_items,
         }
     }
 }
@@ -1217,6 +1239,10 @@ fn validate_analytics_query(
         campaign_group_ids,
         creative_ids,
         fields,
+        start: args.pagination.start,
+        page_size: args.pagination.page_size,
+        fetch_all: args.pagination.all,
+        max_items: args.pagination.max_items,
     })
 }
 
@@ -1478,7 +1504,7 @@ mod tests {
     use super::{
         build_account_search_expression, normalize_creative_urn, parse_date,
         resolve_auth_token_input, validate_revenue_date_range, AdAccountSearchArgs, AuthSetArgs,
-        LinkedInAccessTokenSource, SortOrderArg,
+        LinkedInAccessTokenSource, LinkedInReportPaginationArgs, SortOrderArg,
     };
     use agent_ads_core::linkedin_config::{LinkedInAccessTokenStatus, LinkedInAuthSnapshot};
 
@@ -1555,6 +1581,15 @@ mod tests {
     fn preserves_valid_numeric_creative_urn() {
         let creative_urn = normalize_creative_urn("urn:li:sponsoredCreative:123").unwrap();
         assert_eq!(creative_urn, "urn:li:sponsoredCreative:123");
+    }
+
+    #[test]
+    fn report_pagination_args_default_to_empty() {
+        let pagination = LinkedInReportPaginationArgs::default();
+        assert_eq!(pagination.start, None);
+        assert_eq!(pagination.page_size, None);
+        assert!(!pagination.all);
+        assert_eq!(pagination.max_items, None);
     }
 
     #[test]

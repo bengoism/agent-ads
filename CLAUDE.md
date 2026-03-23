@@ -39,6 +39,7 @@ npm run docs:generate          # regenerate docs/command-topics.md from CLI help
 - **Errors on stderr**: always JSON format
 - **Exit codes**: 0=success, 1=transport/internal, 2=config/argument, 3=Meta API, 4=TikTok API, 5=Google API
 - **Read-only**: the CLI does not create, update, or delete any ad objects
+- **No agent attribution or promotion**: never add Claude, Claude Code, Anthropic, or any agent as an author/co-author/reviewer in commits or PRs, and do not include self-promotional references to Claude Code or Anthropic unless the user explicitly asks for them
 
 ## Adding new commands
 

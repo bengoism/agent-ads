@@ -42,6 +42,24 @@ struct ListMetadata {
     next_page_token: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct OffsetPaging {
+    #[serde(default)]
+    start: Option<u32>,
+    #[serde(default)]
+    count: Option<u32>,
+    #[serde(default)]
+    links: Vec<OffsetPagingLink>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OffsetPagingLink {
+    #[serde(default)]
+    rel: Option<String>,
+    #[serde(default)]
+    href: Option<String>,
+}
+
 impl LinkedInClient {
     pub fn from_config(config: &LinkedInResolvedConfig) -> LinkedInResult<Self> {
         let http = reqwest::Client::builder()
@@ -124,6 +142,69 @@ impl LinkedInClient {
                 break;
             };
             current_params = replace_query_param(&current_params, "pageToken", &next_page_token);
+            let (next_data, next_request_id) = self
+                .request_json(Method::GET, path, &current_params, extra_headers)
+                .await?;
+            data = next_data;
+            last_request_id = next_request_id;
+            last_paging = extract_paging(&data);
+        }
+
+        Ok(LinkedInResponse {
+            data: Value::Array(collected),
+            paging: last_paging,
+            request_id: last_request_id,
+        })
+    }
+
+    pub async fn get_offset_list(
+        &self,
+        path: &str,
+        params: &[(String, String)],
+        extra_headers: &[(&str, &str)],
+        fetch_all: bool,
+        max_items: Option<usize>,
+    ) -> LinkedInResult<LinkedInResponse> {
+        if !fetch_all {
+            let (data, request_id) = self
+                .request_json(Method::GET, path, params, extra_headers)
+                .await?;
+            let elements = extract_elements(&data);
+            return Ok(LinkedInResponse {
+                data: Value::Array(truncate_items(elements, max_items)),
+                paging: extract_paging(&data),
+                request_id,
+            });
+        }
+
+        let mut collected = Vec::new();
+        let mut current_params = params.to_vec();
+        let (mut data, mut last_request_id) = self
+            .request_json(Method::GET, path, &current_params, extra_headers)
+            .await?;
+        let mut last_paging = extract_paging(&data);
+
+        loop {
+            for element in extract_elements(&data) {
+                if let Some(max_items) = max_items {
+                    if collected.len() >= max_items {
+                        break;
+                    }
+                }
+                collected.push(element);
+            }
+
+            if let Some(max_items) = max_items {
+                if collected.len() >= max_items {
+                    break;
+                }
+            }
+
+            let Some((next_start, next_count)) = extract_next_offset_page(&data) else {
+                break;
+            };
+            current_params = replace_query_param(&current_params, "start", &next_start.to_string());
+            current_params = replace_query_param(&current_params, "count", &next_count.to_string());
             let (next_data, next_request_id) = self
                 .request_json(Method::GET, path, &current_params, extra_headers)
                 .await?;
@@ -293,6 +374,50 @@ fn extract_paging(data: &Value) -> Option<Value> {
         .and_then(|parsed| parsed.paging)
 }
 
+fn extract_next_offset_page(data: &Value) -> Option<(u32, u32)> {
+    let paging: OffsetPaging = serde_json::from_value(data.get("paging")?.clone()).ok()?;
+    let link = paging
+        .links
+        .iter()
+        .find(|link| link.rel.as_deref() == Some("next"))?;
+    let count = paging.count?;
+    let computed_start = paging.start.and_then(|start| start.checked_add(count));
+
+    if let Some(href) = link.href.as_deref() {
+        let (href_start, href_count) = extract_offset_params_from_href(href);
+        return Some((href_start.or(computed_start)?, href_count.unwrap_or(count)));
+    }
+
+    computed_start.map(|start| (start, count))
+}
+
+fn extract_offset_params_from_href(href: &str) -> (Option<u32>, Option<u32>) {
+    let parsed = url::Url::parse(href).or_else(|_| {
+        let path = if href.starts_with('/') {
+            href.to_string()
+        } else {
+            format!("/{href}")
+        };
+        url::Url::parse(&format!("https://linkedin.example{path}"))
+    });
+
+    let Ok(url) = parsed else {
+        return (None, None);
+    };
+
+    let mut start = None;
+    let mut count = None;
+    for (key, value) in url.query_pairs() {
+        match key.as_ref() {
+            "start" => start = value.parse::<u32>().ok(),
+            "count" => count = value.parse::<u32>().ok(),
+            _ => {}
+        }
+    }
+
+    (start, count)
+}
+
 fn replace_query_param(
     params: &[(String, String)],
     key: &str,
@@ -310,7 +435,9 @@ fn replace_query_param(
 #[cfg(test)]
 mod tests {
     use serde_json::json;
-    use wiremock::matchers::{body_string_contains, header, method, path};
+    use wiremock::matchers::{
+        body_string_contains, header, method, path, query_param, query_param_is_missing,
+    };
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::LinkedInClient;
@@ -389,6 +516,75 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.data, json!([{ "id": 1 }, { "id": 2 }]));
+    }
+
+    #[tokio::test]
+    async fn auto_paginates_with_start_and_count_links() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/adAnalytics"))
+            .and(query_param("q", "analytics"))
+            .and(query_param("count", "1"))
+            .and(query_param_is_missing("start"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "elements": [{ "id": 1 }],
+                "paging": {
+                    "start": 0,
+                    "count": 1,
+                    "links": [
+                        {
+                            "rel": "next",
+                            "href": "/adAnalytics?q=analytics&count=1&start=1"
+                        }
+                    ]
+                }
+            })))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/adAnalytics"))
+            .and(query_param("q", "analytics"))
+            .and(query_param("count", "1"))
+            .and(query_param("start", "1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "elements": [{ "id": 2 }],
+                "paging": {
+                    "start": 1,
+                    "count": 1,
+                    "links": []
+                }
+            })))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+
+        let client = LinkedInClient::from_config(&test_config(&server.uri())).unwrap();
+        let response = client
+            .get_offset_list(
+                "adAnalytics",
+                &[
+                    ("q".to_string(), "analytics".to_string()),
+                    ("count".to_string(), "1".to_string()),
+                ],
+                &[],
+                true,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.data, json!([{ "id": 1 }, { "id": 2 }]));
+        assert_eq!(
+            response.paging,
+            Some(json!({
+                "count": 1,
+                "links": [],
+                "start": 1
+            }))
+        );
     }
 
     #[tokio::test]

@@ -191,6 +191,10 @@ pub mod reports {
         pub campaign_group_ids: &'a [String],
         pub creative_ids: &'a [String],
         pub fields: &'a [String],
+        pub start: Option<u32>,
+        pub page_size: Option<u32>,
+        pub fetch_all: bool,
+        pub max_items: Option<usize>,
     }
 
     pub async fn query_analytics(
@@ -247,8 +251,18 @@ pub mod reports {
         if !query.fields.is_empty() {
             params.push(("fields".to_string(), query.fields.join(",")));
         }
+        with_optional_number(&mut params, "start", query.start);
+        with_optional_number(&mut params, "count", query.page_size);
 
-        client.get_object("adAnalytics", &params, &[]).await
+        client
+            .get_offset_list(
+                "adAnalytics",
+                &params,
+                &[],
+                query.fetch_all,
+                query.max_items,
+            )
+            .await
     }
 
     pub fn extract_elements(value: &Value) -> Vec<Value> {
