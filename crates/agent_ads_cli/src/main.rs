@@ -1,4 +1,5 @@
 mod google;
+mod linkedin;
 mod meta;
 mod pinterest;
 mod tiktok;
@@ -14,6 +15,8 @@ use agent_ads_core::config::{inspect, ConfigOverrides, ResolvedConfig};
 use agent_ads_core::error::{GraphApiError, MetaAdsError};
 use agent_ads_core::google_config::GoogleConfigOverrides;
 use agent_ads_core::google_error::{GoogleApiError, GoogleError};
+use agent_ads_core::linkedin_config::LinkedInConfigOverrides;
+use agent_ads_core::linkedin_error::{LinkedInApiError, LinkedInError};
 use agent_ads_core::output::{
     render_output, OutputEnvelope, OutputFormat, OutputMeta, RenderOptions,
 };
@@ -22,12 +25,12 @@ use agent_ads_core::pinterest_error::{PinterestApiError, PinterestError};
 use agent_ads_core::tiktok_config::TikTokConfigOverrides;
 use agent_ads_core::tiktok_error::{TikTokApiError, TikTokError};
 use agent_ads_core::{
-    google_inspect, load_auth_bundle, lock_auth_bundle, pinterest_inspect,
+    google_inspect, linkedin_inspect, load_auth_bundle, lock_auth_bundle, pinterest_inspect,
     prepare_auth_bundle_for_update, store_auth_bundle, tiktok_inspect, AuthBundle,
-    GoogleAuthBundle, GoogleClient, GoogleResolvedConfig, GraphClient, MetaAuthBundle,
-    OsKeyringStore, PinterestAuthBundle, PinterestClient, PinterestResolvedConfig,
-    SecretStoreError, SecretStoreErrorKind, TikTokClient, TikTokResolvedConfig,
-    AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
+    GoogleAuthBundle, GoogleClient, GoogleResolvedConfig, GraphClient, LinkedInAuthBundle,
+    LinkedInClient, LinkedInResolvedConfig, MetaAuthBundle, OsKeyringStore, PinterestAuthBundle,
+    PinterestClient, PinterestResolvedConfig, SecretStoreError, SecretStoreErrorKind, TikTokClient,
+    TikTokResolvedConfig, AUTH_BUNDLE_ACCOUNT, AUTH_BUNDLE_SERVICE,
 };
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use dialoguer::{theme::ColorfulTheme, Select};
@@ -35,6 +38,7 @@ use serde_json::{json, Value};
 use tracing_subscriber::EnvFilter;
 
 use google::GoogleCommand;
+use linkedin::LinkedInCommand;
 use meta::MetaCommand;
 use pinterest::PinterestCommand;
 use tiktok::TikTokCommand;
@@ -154,6 +158,11 @@ enum Command {
         #[command(subcommand)]
         command: PinterestCommand,
     },
+    #[command(about = "LinkedIn Marketing API commands")]
+    Linkedin {
+        #[command(subcommand)]
+        command: LinkedInCommand,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -195,6 +204,7 @@ enum RootAuthProvider {
     Google,
     Tiktok,
     Pinterest,
+    Linkedin,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -241,6 +251,7 @@ impl RootAuthProvider {
             Self::Google => "google",
             Self::Tiktok => "tiktok",
             Self::Pinterest => "pinterest",
+            Self::Linkedin => "linkedin",
         }
     }
 }
@@ -261,11 +272,12 @@ impl RootAuthFlow {
     }
 }
 
-const ROOT_AUTH_PROVIDER_ORDER: [RootAuthProvider; 4] = [
+const ROOT_AUTH_PROVIDER_ORDER: [RootAuthProvider; 5] = [
     RootAuthProvider::Meta,
     RootAuthProvider::Google,
     RootAuthProvider::Tiktok,
     RootAuthProvider::Pinterest,
+    RootAuthProvider::Linkedin,
 ];
 
 // ---------------------------------------------------------------------------
@@ -330,6 +342,13 @@ async fn main() -> ExitCode {
         output_format: format.map(Into::into),
         ..PinterestConfigOverrides::default()
     };
+    let linkedin_overrides = LinkedInConfigOverrides {
+        api_base_url: api_base_url.clone(),
+        api_version: api_version.clone(),
+        timeout_seconds,
+        output_format: format.map(Into::into),
+        ..LinkedInConfigOverrides::default()
+    };
 
     let result = match command {
         Command::Providers { command } => Ok(handle_providers(command)),
@@ -386,6 +405,53 @@ async fn main() -> ExitCode {
                     });
                     eprintln!("{rendered}");
                     return ExitCode::from(pinterest_err.exit_code() as u8);
+                }
+            }
+        }
+        Command::Linkedin { command } => {
+            if format.is_none() {
+                output_options.format = match resolve_linkedin_output_format(
+                    config.as_deref(),
+                    &secret_store,
+                    &linkedin_overrides,
+                ) {
+                    Ok(format) => format,
+                    Err(error) => {
+                        let payload = linkedin_error_payload(&error);
+                        let rendered = if output_options.pretty {
+                            serde_json::to_string_pretty(&payload)
+                        } else {
+                            serde_json::to_string(&payload)
+                        }
+                        .unwrap_or_else(|_| {
+                            "{\"error\":{\"message\":\"failed to serialize error\"}}".to_string()
+                        });
+                        eprintln!("{rendered}");
+                        return ExitCode::from(error.exit_code() as u8);
+                    }
+                };
+            }
+            let linkedin_result = dispatch_linkedin(
+                command,
+                &secret_store,
+                config.as_deref(),
+                &linkedin_overrides,
+            )
+            .await;
+            match linkedin_result {
+                Ok(result) => Ok(result),
+                Err(linkedin_err) => {
+                    let payload = linkedin_error_payload(&linkedin_err);
+                    let rendered = if output_options.pretty {
+                        serde_json::to_string_pretty(&payload)
+                    } else {
+                        serde_json::to_string(&payload)
+                    }
+                    .unwrap_or_else(|_| {
+                        "{\"error\":{\"message\":\"failed to serialize error\"}}".to_string()
+                    });
+                    eprintln!("{rendered}");
+                    return ExitCode::from(linkedin_err.exit_code() as u8);
                 }
             }
         }
@@ -599,6 +665,30 @@ async fn dispatch_google(
     }
 }
 
+async fn dispatch_linkedin(
+    command: LinkedInCommand,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    config_path: Option<&Path>,
+    overrides: &LinkedInConfigOverrides,
+) -> Result<CommandResult, LinkedInError> {
+    match command {
+        LinkedInCommand::Auth { command } => linkedin::handle_auth(command, secret_store),
+        LinkedInCommand::Config { command } => {
+            let snapshot = linkedin_inspect(config_path, secret_store, overrides)?;
+            linkedin::handle_config(command, snapshot)
+        }
+        LinkedInCommand::Doctor(args) => {
+            let snapshot = linkedin_inspect(config_path, secret_store, overrides)?;
+            linkedin::handle_doctor(config_path, secret_store, overrides, args, snapshot).await
+        }
+        command => {
+            let config = LinkedInResolvedConfig::load(config_path, secret_store, overrides)?;
+            let client = LinkedInClient::from_config(&config)?;
+            linkedin::dispatch_linkedin_with_client(&client, &config, command).await
+        }
+    }
+}
+
 async fn dispatch_pinterest(
     command: PinterestCommand,
     secret_store: &dyn agent_ads_core::SecretStore,
@@ -643,6 +733,14 @@ fn resolve_google_output_format(
     overrides: &GoogleConfigOverrides,
 ) -> Result<OutputFormat, GoogleError> {
     google_inspect(config_path, secret_store, overrides).map(|snapshot| snapshot.output_format)
+}
+
+fn resolve_linkedin_output_format(
+    config_path: Option<&Path>,
+    secret_store: &dyn agent_ads_core::SecretStore,
+    overrides: &LinkedInConfigOverrides,
+) -> Result<OutputFormat, LinkedInError> {
+    linkedin_inspect(config_path, secret_store, overrides).map(|snapshot| snapshot.output_format)
 }
 
 fn resolve_pinterest_output_format(
@@ -708,6 +806,34 @@ fn google_error_payload(error: &GoogleError) -> Value {
             "error": {
                 "kind": "internal",
                 "provider": "google",
+                "message": error.to_string()
+            }
+        }),
+    }
+}
+
+fn linkedin_error_payload(error: &LinkedInError) -> Value {
+    match error {
+        LinkedInError::Api(LinkedInApiError {
+            message,
+            service_error_code,
+            status,
+            request_id,
+            ..
+        }) => json!({
+            "error": {
+                "kind": "api",
+                "provider": "linkedin",
+                "message": message,
+                "code": service_error_code,
+                "status": status,
+                "request_id": request_id,
+            }
+        }),
+        _ => json!({
+            "error": {
+                "kind": "internal",
+                "provider": "linkedin",
                 "message": error.to_string()
             }
         }),
@@ -1167,6 +1293,38 @@ fn run_root_auth_setup(
                 None,
             )
         }
+        RootAuthProvider::Linkedin => {
+            let token = match linkedin::resolve_auth_token_input(&linkedin::AuthSetArgs::default())
+            {
+                Ok(token) => token,
+                Err(error) => return exit_with_linkedin_error(&error, output_options),
+            };
+            bundle.linkedin = Some(LinkedInAuthBundle {
+                access_token: Some(token),
+            });
+
+            if let Err(error) = persist_root_auth_bundle(provider, secret_store, &bundle) {
+                return exit_with_linkedin_error(
+                    &LinkedInError::Config(error.to_string()),
+                    output_options,
+                );
+            }
+
+            emit_result(
+                static_command_result(
+                    json!({
+                        "provider": "linkedin",
+                        "stored": true,
+                        "recovered_invalid_bundle": recovered_invalid_bundle,
+                        "credentials_stored": ["access_token"],
+                    }),
+                    "/linkedin/auth/set",
+                    0,
+                ),
+                output_options,
+                None,
+            )
+        }
     }
 }
 
@@ -1310,6 +1468,22 @@ fn run_root_auth_clear_with_bundle(
                 0,
             )
         }
+        RootAuthProvider::Linkedin => {
+            let deleted = bundle
+                .linkedin
+                .take()
+                .and_then(|linkedin| linkedin.access_token)
+                .is_some();
+            static_command_result(
+                json!({
+                    "provider": "linkedin",
+                    "access_token_deleted": deleted,
+                    "recovered_invalid_bundle": recovered_invalid_bundle,
+                }),
+                "/linkedin/auth/delete",
+                0,
+            )
+        }
     };
 
     if let Err(error) = persist_root_auth_bundle(provider, secret_store, bundle) {
@@ -1325,6 +1499,9 @@ fn run_root_auth_clear_with_bundle(
                 &PinterestError::Config(error.to_string()),
                 output_options,
             ),
+            RootAuthProvider::Linkedin => {
+                exit_with_linkedin_error(&LinkedInError::Config(error.to_string()), output_options)
+            }
         };
     }
 
@@ -1410,6 +1587,9 @@ fn persist_root_auth_bundle(
             pinterest::pinterest_auth_storage_error("store Pinterest credentials", &error)
                 .to_string(),
         ),
+        RootAuthProvider::Linkedin => MetaAdsError::Config(
+            linkedin::auth_storage_error("store LinkedIn credentials", &error).to_string(),
+        ),
     })
 }
 
@@ -1464,6 +1644,12 @@ fn run_root_auth_delete_provider(
                 Err(error) => exit_with_pinterest_error(&error, output_options),
             }
         }
+        RootAuthProvider::Linkedin => {
+            match linkedin::handle_auth(linkedin::AuthCommand::Delete, secret_store) {
+                Ok(result) => emit_result(result, output_options, None),
+                Err(error) => exit_with_linkedin_error(&error, output_options),
+            }
+        }
     }
 }
 
@@ -1499,6 +1685,7 @@ fn build_root_auth_status_from_bundle_result(
         build_google_root_auth_status(bundle, store_error.as_ref()),
         build_tiktok_root_auth_status(bundle, store_error.as_ref()),
         build_pinterest_root_auth_status(bundle, store_error.as_ref()),
+        build_linkedin_root_auth_status(bundle, store_error.as_ref()),
     ]
 }
 
@@ -1688,6 +1875,27 @@ fn build_pinterest_root_auth_status(
     )
 }
 
+fn build_linkedin_root_auth_status(
+    bundle: Option<&AuthBundle>,
+    store_error: Option<&SecretStoreError>,
+) -> RootProviderAuthStatus {
+    let access_token = root_bundle_credential(
+        agent_ads_core::LINKEDIN_ADS_ACCESS_TOKEN_ENV_VAR,
+        bundle
+            .and_then(|bundle| bundle.linkedin.as_ref())
+            .and_then(|linkedin| linkedin.access_token.as_ref())
+            .is_some(),
+    );
+
+    provider_auth_summary(
+        RootAuthProvider::Linkedin,
+        access_token.present,
+        credential_store_available(store_error),
+        credential_store_error(store_error),
+        [("access_token".to_string(), access_token)],
+    )
+}
+
 fn provider_auth_summary(
     provider: RootAuthProvider,
     usable: bool,
@@ -1806,6 +2014,12 @@ fn handle_providers(command: ProvidersCommand) -> CommandResult {
                     "implemented": true,
                     "status": "available",
                     "summary": "Read-only Pinterest Ads API support."
+                },
+                {
+                    "provider": "linkedin",
+                    "implemented": true,
+                    "status": "available",
+                    "summary": "Read-only LinkedIn Marketing API support."
                 }
             ]),
             "/providers",
@@ -1932,6 +2146,14 @@ fn exit_with_tiktok_error(error: &TikTokError, options: &OutputOptions) -> ExitC
     )
 }
 
+fn exit_with_linkedin_error(error: &LinkedInError, options: &OutputOptions) -> ExitCode {
+    render_error_payload(
+        linkedin_error_payload(error),
+        options,
+        error.exit_code() as u8,
+    )
+}
+
 fn exit_with_pinterest_error(error: &PinterestError, options: &OutputOptions) -> ExitCode {
     render_error_payload(
         pinterest_error_payload(error),
@@ -2015,6 +2237,7 @@ mod tests {
     use std::sync::{LazyLock, Mutex};
 
     use agent_ads_core::google_config::GoogleConfigOverrides;
+    use agent_ads_core::linkedin_config::LinkedInConfigOverrides;
     use agent_ads_core::output::OutputFormat;
     use agent_ads_core::pinterest_config::PinterestConfigOverrides;
     use agent_ads_core::secret_store::{SecretStore, SecretStoreError};
@@ -2027,8 +2250,9 @@ mod tests {
 
     use super::{
         build_root_auth_status, parse_root_auth_confirmation, parse_root_auth_selection,
-        resolve_google_output_format, resolve_pinterest_output_format, root_auth_clear_menu_items,
-        root_auth_menu_items, run_root_auth_clear_with_bundle, run_root_auth_delete_provider,
+        resolve_google_output_format, resolve_linkedin_output_format,
+        resolve_pinterest_output_format, root_auth_clear_menu_items, root_auth_menu_items,
+        run_root_auth_clear_with_bundle, run_root_auth_delete_provider,
         should_run_interactive_root_auth, validate_root_auth_clear_mode, Cli, OutputOptions,
         RootAuthProvider, RootAuthState,
     };
@@ -2139,6 +2363,7 @@ mod tests {
         assert!(help.contains("google"));
         assert!(help.contains("tiktok"));
         assert!(help.contains("pinterest"));
+        assert!(help.contains("linkedin"));
     }
 
     #[test]
@@ -2164,9 +2389,9 @@ mod tests {
 
     #[test]
     fn root_auth_selection_parses_cancel_and_index() {
-        assert_eq!(parse_root_auth_selection("q", 4).unwrap(), None);
-        assert_eq!(parse_root_auth_selection("2", 4).unwrap(), Some(1));
-        assert!(parse_root_auth_selection("9", 4).is_err());
+        assert_eq!(parse_root_auth_selection("q", 5).unwrap(), None);
+        assert_eq!(parse_root_auth_selection("2", 5).unwrap(), Some(1));
+        assert!(parse_root_auth_selection("9", 5).is_err());
     }
 
     #[test]
@@ -2232,16 +2457,19 @@ mod tests {
         env::remove_var("PINTEREST_ADS_APP_SECRET");
         env::remove_var("PINTEREST_ADS_ACCESS_TOKEN");
         env::remove_var("PINTEREST_ADS_REFRESH_TOKEN");
+        env::remove_var("LINKEDIN_ADS_ACCESS_TOKEN");
 
         let store = FakeSecretStore::default();
         let summaries = build_root_auth_status(&store);
         let items = root_auth_menu_items(&summaries);
 
-        assert_eq!(items.len(), 4);
+        assert_eq!(items.len(), 5);
         assert!(items[0].contains("meta"));
         assert!(items[0].contains("0/1"));
         assert!(items[1].contains("google"));
         assert!(items[1].contains("0/4"));
+        assert!(items[4].contains("linkedin"));
+        assert!(items[4].contains("0/1"));
     }
 
     #[test]
@@ -2269,7 +2497,7 @@ mod tests {
 
         let summaries = build_root_auth_status(&store);
 
-        assert_eq!(summaries.len(), 4);
+        assert_eq!(summaries.len(), 5);
         assert_eq!(store.get_call_count(), 1);
     }
 
@@ -2892,5 +3120,96 @@ mod tests {
         .unwrap();
 
         assert_eq!(format, OutputFormat::Jsonl);
+    }
+
+    #[test]
+    fn linkedin_help_lists_command_topics() {
+        let help = nested_help(&["linkedin"]);
+        assert!(help.contains("ad-accounts"));
+        assert!(help.contains("campaign-groups"));
+        assert!(help.contains("campaigns"));
+        assert!(help.contains("creatives"));
+        assert!(help.contains("analytics"));
+        assert!(help.contains("auth"));
+        assert!(help.contains("doctor"));
+        assert!(help.contains("config"));
+    }
+
+    #[test]
+    fn linkedin_analytics_query_parses() {
+        let cli = Cli::try_parse_from([
+            "agent-ads",
+            "linkedin",
+            "analytics",
+            "query",
+            "--finder",
+            "statistics",
+            "--account-id",
+            "123",
+            "--pivot",
+            "CAMPAIGN",
+            "--time-granularity",
+            "DAILY",
+            "--since",
+            "2026-03-01",
+            "--until",
+            "2026-03-07",
+            "--field",
+            "impressions",
+        ]);
+
+        assert!(
+            cli.is_err(),
+            "unexpectedly accepted unsupported --field flag"
+        );
+
+        let cli = Cli::try_parse_from([
+            "agent-ads",
+            "linkedin",
+            "analytics",
+            "query",
+            "--finder",
+            "statistics",
+            "--account-id",
+            "123",
+            "--pivot",
+            "CAMPAIGN",
+            "--time-granularity",
+            "DAILY",
+            "--since",
+            "2026-03-01",
+            "--until",
+            "2026-03-07",
+            "--fields",
+            "impressions,clicks",
+        ])
+        .unwrap();
+        let debug = format!("{cli:?}");
+        assert!(debug.contains("Linkedin"));
+        assert!(debug.contains("Analytics"));
+    }
+
+    #[test]
+    fn linkedin_output_format_uses_provider_config() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var("LINKEDIN_ADS_OUTPUT_FORMAT");
+
+        let store = FakeSecretStore::default();
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("agent-ads.config.json");
+        fs::write(
+            &path,
+            r#"{"providers":{"linkedin":{"output_format":"csv"}}}"#,
+        )
+        .unwrap();
+
+        let format = resolve_linkedin_output_format(
+            Some(&path),
+            &store,
+            &LinkedInConfigOverrides::default(),
+        )
+        .unwrap();
+
+        assert_eq!(format, OutputFormat::Csv);
     }
 }

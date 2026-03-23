@@ -8,7 +8,7 @@
     "docs:generate": "npm run build:ts && node npm/agent-ads/scripts/generate-command-topics.js",
     "release:publish": "npm run build:ts && node npm/agent-ads/scripts/publish-release.js",
     "release:trust": "npm run build:ts && node npm/agent-ads/scripts/configure-trusted-publishing.js",
-    "test:smoke": "npm run build:ts && cargo build -q -p agent_ads_cli && node npm/agent-ads/bin/agent-ads.js --version && node npm/agent-ads/bin/agent-ads.js providers list && node npm/agent-ads/bin/agent-ads.js auth status && node npm/agent-ads/bin/agent-ads.js pinterest --help",
+    "test:smoke": "npm run build:ts && cargo build -q -p agent_ads_cli && node npm/agent-ads/bin/agent-ads.js --version && node npm/agent-ads/bin/agent-ads.js providers list && node npm/agent-ads/bin/agent-ads.js auth status && node npm/agent-ads/bin/agent-ads.js pinterest --help && node npm/agent-ads/bin/agent-ads.js linkedin --help",
     "web:dev": "npm --prefix website run dev",
     "web:build": "npm --prefix website run build",
     "web:preview": "npm --prefix website run preview"

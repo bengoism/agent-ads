@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::auth_bundle::load_auth_bundle;
 use crate::error::{MetaAdsError, Result};
 use crate::google_config::GoogleFileConfig;
+use crate::linkedin_config::LinkedInFileConfig;
 use crate::output::OutputFormat;
 use crate::pinterest_config::PinterestFileConfig;
 use crate::secret_store::{SecretStore, SecretStoreErrorKind};
@@ -33,6 +34,8 @@ pub struct ProviderFileConfigs {
     pub meta: Option<FileConfig>,
     #[serde(default)]
     pub google: Option<GoogleFileConfig>,
+    #[serde(default)]
+    pub linkedin: Option<LinkedInFileConfig>,
     #[serde(default)]
     pub pinterest: Option<PinterestFileConfig>,
     #[serde(default)]

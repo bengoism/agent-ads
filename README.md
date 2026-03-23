@@ -2,7 +2,7 @@
 
 CLI for querying ad platform APIs.
 
-Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram), Google Ads, TikTok, and Pinterest supported today, read-only.
+Reports, creatives, accounts, tracking — from the terminal. Built in Rust, shipped via npm. Meta (Facebook/Instagram), Google Ads, TikTok, Pinterest, and LinkedIn supported today, read-only.
 
 ## Install
 
@@ -311,6 +311,64 @@ agent-ads pinterest report-runs wait \
   --token report-token
 ```
 
+## Quick Start (LinkedIn)
+
+### 1. Authenticate
+
+LinkedIn v1 uses an access token only. Store it once in your OS credential store:
+
+```bash
+agent-ads linkedin auth set
+```
+
+Or set a shell variable for the current process:
+
+```bash
+export LINKEDIN_ADS_ACCESS_TOKEN=access-token
+```
+
+Optional default account:
+
+```bash
+export LINKEDIN_ADS_DEFAULT_ACCOUNT_ID=1234567890
+```
+
+### 2. Verify your setup
+
+```bash
+agent-ads linkedin doctor
+```
+
+Add `--api` to also ping the LinkedIn Marketing API and confirm the token works.
+
+### 3. Discover your ad accounts
+
+```bash
+agent-ads linkedin ad-accounts list
+agent-ads linkedin ad-accounts search --status ACTIVE
+```
+
+### 4. Explore campaigns and creatives
+
+```bash
+agent-ads linkedin campaign-groups list --account-id 1234567890
+agent-ads linkedin campaigns list --account-id 1234567890
+agent-ads linkedin creatives list --account-id 1234567890
+```
+
+### 5. Pull a reporting query
+
+```bash
+agent-ads linkedin analytics query \
+  --finder statistics \
+  --account-id 1234567890 \
+  --pivot CAMPAIGN \
+  --time-granularity DAILY \
+  --since 2026-03-01 \
+  --until 2026-03-16 \
+  --fields impressions,clicks,costInLocalCurrency
+```
+
 ## Quick Start (Google)
 
 ### 1. Authenticate
@@ -392,6 +450,7 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 | `agent-ads google ...` | Google Ads commands |
 | `agent-ads tiktok ...` | TikTok Business API commands |
 | `agent-ads pinterest ...` | Pinterest Ads API commands |
+| `agent-ads linkedin ...` | LinkedIn Marketing API commands |
 
 ### Meta: Discovery
 
@@ -545,6 +604,32 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 | `pinterest config validate` | Validate config file |
 | `pinterest doctor` | Verify auth, config, and (optionally) API connectivity |
 
+### LinkedIn: Discovery & Objects
+
+| Command | Description |
+|---------|-------------|
+| `linkedin ad-accounts list` | List accessible ad accounts and join the authenticated user's role |
+| `linkedin ad-accounts get` | Get ad account details |
+| `linkedin ad-accounts search` | Search ad accounts with LinkedIn-native filters |
+| `linkedin campaign-groups list` | List campaign groups for an ad account |
+| `linkedin campaigns list` | List campaigns for an ad account |
+| `linkedin campaigns get` | Get a single campaign |
+| `linkedin creatives list` | List creatives for an ad account |
+| `linkedin creatives get` | Get a single creative |
+
+### LinkedIn: Reporting & Diagnostics
+
+| Command | Description |
+|---------|-------------|
+| `linkedin analytics query` | Run a LinkedIn `adAnalytics` finder query |
+| `linkedin auth set` | Store the LinkedIn access token in the OS credential store |
+| `linkedin auth status` | Show auth source and secure storage status |
+| `linkedin auth delete` | Delete the stored LinkedIn access token |
+| `linkedin config path` | Show resolved config file path |
+| `linkedin config show` | Show full resolved configuration |
+| `linkedin config validate` | Validate config file |
+| `linkedin doctor` | Verify auth, config, and (optionally) API connectivity |
+
 ## Configuration
 
 ### Secrets
@@ -590,12 +675,18 @@ Create a config file to set defaults and avoid repeating flags:
       "api_version": "v5",
       "timeout_seconds": 60,
       "default_ad_account_id": "1234567890"
+    },
+    "linkedin": {
+      "api_base_url": "https://api.linkedin.com/rest",
+      "api_version": "202603",
+      "timeout_seconds": 60,
+      "default_account_id": "1234567890"
     }
   }
 }
 ```
 
-Setting `default_account_id` (Meta), `default_customer_id` (Google), `default_advertiser_id` (TikTok), or `default_ad_account_id` (Pinterest) lets you omit those flags from commands.
+Setting `default_account_id` (Meta or LinkedIn), `default_customer_id` (Google), `default_advertiser_id` (TikTok), or `default_ad_account_id` (Pinterest) lets you omit those flags from commands.
 
 ## Output
 
@@ -619,6 +710,7 @@ Pagination differs by provider (`--all` auto-follows all pages for every provide
 | 4 | TikTok API error |
 | 5 | Google API error |
 | 6 | Pinterest API error |
+| 7 | LinkedIn API error |
 
 ## Docs Map
 
@@ -630,8 +722,9 @@ Pagination differs by provider (`--all` auto-follows all pages for every provide
 | Google provider deep-dive | [skills/agent-ads/references/google.md](skills/agent-ads/references/google.md) |
 | TikTok provider deep-dive | [skills/agent-ads/references/tiktok.md](skills/agent-ads/references/tiktok.md) |
 | Pinterest provider deep-dive | [skills/agent-ads/references/pinterest.md](skills/agent-ads/references/pinterest.md) |
+| LinkedIn provider deep-dive | [skills/agent-ads/references/linkedin.md](skills/agent-ads/references/linkedin.md) |
 | Full CLI reference (generated) | [docs/command-topics.md](docs/command-topics.md) |
-| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads google --help`, `agent-ads tiktok --help`, `agent-ads pinterest --help` |
+| Live help | `agent-ads --help`, `agent-ads meta --help`, `agent-ads google --help`, `agent-ads tiktok --help`, `agent-ads pinterest --help`, `agent-ads linkedin --help` |
 
 ## Skills
 
