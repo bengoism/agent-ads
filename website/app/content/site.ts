@@ -14,7 +14,7 @@ export type EngineMeta = {
   stats: Array<{ label: string; value: string }>;
 };
 
-export const version = "0.8.0";
+export const version = "0.9.0";
 
 export const repoLinks = {
   github: "https://github.com/bengoism/agent-ads",
