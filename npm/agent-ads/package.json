@@ -1,6 +1,6 @@
 {
   "name": "agent-ads",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "CLI launcher for the multi-provider agent-ads Rust binary",
   "author": "bengoism",
   "license": "MIT",
