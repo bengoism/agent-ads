@@ -73,7 +73,7 @@ export META_ADS_ACCESS_TOKEN=EAABs...
 
 **Required permission:** `ads_read` — read access to campaigns, insights, creatives, and pixels.
 
-**Optional permission:** `business_management` — discover businesses and ad accounts (`businesses list`, `ad-accounts list`). Without it, you can still query any account directly if you know its ID.
+**Optional permission:** `business_management` — discover businesses and business-scoped ad accounts (`businesses list`, `ad-accounts list --business-id ...`). Without it, `ad-accounts list` can still fall back to your accessible `/me/adaccounts`, and you can query any account directly if you know its ID.
 
 Both permissions are read-only. The CLI never creates, modifies, or deletes anything.
 
@@ -106,7 +106,10 @@ Add `--api` to also ping the Meta API and confirm your token works.
 # List businesses you have access to
 agent-ads meta businesses list
 
-# List ad accounts under a business
+# List accessible ad accounts for the current token
+agent-ads meta ad-accounts list
+
+# Or list ad accounts under a specific business
 agent-ads meta ad-accounts list --business-id 1234567890
 ```
 
@@ -533,7 +536,7 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 | Command | Description |
 |---------|-------------|
 | `meta businesses list` | List businesses accessible to your token |
-| `meta ad-accounts list` | List ad accounts under a business |
+| `meta ad-accounts list` | List accessible ad accounts or business-scoped relationships |
 | `meta campaigns list` | List campaigns in an ad account |
 | `meta adsets list` | List ad sets in an ad account |
 | `meta ads list` | List ads in an ad account |
@@ -554,7 +557,7 @@ Providers are always explicit: `agent-ads <provider> <command>`. There is no cro
 | Command | Description |
 |---------|-------------|
 | `meta creatives get` | Fetch a creative by ID |
-| `meta creatives preview` | Get rendered ad preview (by creative or ad ID) |
+| `meta creatives preview` | Get rendered ad preview for a specific ad format |
 | `meta activities list` | List account activity/change history |
 
 ### Meta: Tracking & Measurement

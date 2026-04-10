@@ -12,7 +12,7 @@ This is the routing guide for the Meta provider. Read this first when the user w
 | Run a performance report (sync) | `agent-ads meta insights query ...` | [meta-reports.md](meta-reports.md) |
 | Run a large async report | `agent-ads meta insights export --async --wait ...` | [meta-reports.md](meta-reports.md) |
 | Manage async report lifecycle | `agent-ads meta report-runs submit/wait/results` | [meta-reports.md](meta-reports.md) |
-| Inspect ad creatives | `agent-ads meta creatives preview --ad <id>` | [meta-creative-and-changes.md](meta-creative-and-changes.md) |
+| Inspect ad creatives | `agent-ads meta creatives preview --ad <id> --ad-format MOBILE_FEED_STANDARD` | [meta-creative-and-changes.md](meta-creative-and-changes.md) |
 | Review account change history | `agent-ads meta activities list --account <id>` | [meta-creative-and-changes.md](meta-creative-and-changes.md) |
 | Check pixels, datasets, or measurement health | `agent-ads meta pixel-health get --pixel <id>` | [meta-tracking.md](meta-tracking.md) |
 | Follow an end-to-end recipe | — | [meta-workflows.md](meta-workflows.md) |
@@ -23,6 +23,7 @@ Load only the reference file you need. Do not preload all of them.
 
 - Forgetting `META_ADS_ACCESS_TOKEN` before running API commands
 - Passing both `--account` and `--object` to insights commands (they are mutually exclusive)
+- Forgetting `--ad-format` on `creatives preview`, or using `daily` instead of `--time-increment 1`
 - Using `--action-breakdowns` without `actions` in `--fields`
 - Treating default JSON output as if it includes `meta`, `paging`, or `warnings` (it doesn't — use `--envelope`)
 - Assuming `pixel-health` is a raw EMQ passthrough (it's a combined diagnostic view)

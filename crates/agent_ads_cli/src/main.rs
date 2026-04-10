@@ -2921,9 +2921,40 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_time_increment_aliases() {
+        let error = Cli::try_parse_from([
+            "agent-ads",
+            "meta",
+            "insights",
+            "query",
+            "--time-increment",
+            "daily",
+        ])
+        .unwrap_err();
+
+        assert!(error.to_string().contains("--time-increment"));
+        assert!(error.to_string().contains("all_days"));
+    }
+
+    #[test]
     fn requires_a_preview_target() {
         let result = Cli::try_parse_from(["agent-ads", "meta", "creatives", "preview"]);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn requires_ad_format_for_preview() {
+        let error = Cli::try_parse_from([
+            "agent-ads",
+            "meta",
+            "creatives",
+            "preview",
+            "--creative",
+            "123",
+        ])
+        .unwrap_err();
+
+        assert!(error.to_string().contains("--ad-format"));
     }
 
     #[test]

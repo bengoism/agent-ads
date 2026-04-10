@@ -31,7 +31,7 @@ pub enum MetaCommand {
         #[command(subcommand)]
         command: BusinessesCommand,
     },
-    #[command(about = "List ad accounts under a business")]
+    #[command(about = "List accessible ad accounts or business-scoped relationships")]
     AdAccounts {
         #[command(subcommand)]
         command: AdAccountsCommand,
@@ -116,7 +116,10 @@ pub enum BusinessesCommand {
 
 #[derive(Subcommand, Debug)]
 pub enum AdAccountsCommand {
-    #[command(about = "List ad accounts by scope", visible_alias = "ls")]
+    #[command(
+        about = "List accessible ad accounts or business-scoped relationships",
+        visible_alias = "ls"
+    )]
     List(AdAccountListArgs),
 }
 
@@ -254,7 +257,7 @@ pub struct BusinessListArgs {
     pub field_input: FieldInputArgs,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ScopeArg {
     Accessible,
     Owned,
@@ -267,6 +270,16 @@ impl From<ScopeArg> for accounts::AdAccountScope {
             ScopeArg::Accessible => Self::Accessible,
             ScopeArg::Owned => Self::Owned,
             ScopeArg::PendingClient => Self::PendingClient,
+        }
+    }
+}
+
+impl ScopeArg {
+    fn as_cli_value(self) -> &'static str {
+        match self {
+            Self::Accessible => "accessible",
+            Self::Owned => "owned",
+            Self::PendingClient => "pending-client",
         }
     }
 }
@@ -299,7 +312,11 @@ pub struct InsightsRequestArgs {
     pub selector: SelectorArgs,
     #[arg(long, help = "Aggregation level: account, campaign, adset, ad")]
     pub level: Option<String>,
-    #[arg(long, help = "Time bucketing: 1 (daily), 7, 14, monthly, all_days")]
+    #[arg(
+        long,
+        value_parser = parse_time_increment,
+        help = "Time bucketing: monthly, all_days, or an integer number of days from 1 to 90"
+    )]
     pub time_increment: Option<String>,
     #[command(flatten)]
     pub field_input: FieldInputArgs,
@@ -417,8 +434,12 @@ pub struct CreativePreviewArgs {
     pub creative: Option<String>,
     #[arg(long = "ad", alias = "ad-id")]
     pub ad: Option<String>,
-    #[arg(long)]
-    pub ad_format: Option<String>,
+    #[arg(
+        long,
+        required = true,
+        help = "Required ad format to preview (e.g. MOBILE_FEED_STANDARD)"
+    )]
+    pub ad_format: String,
     #[arg(long)]
     pub render_type: Option<String>,
     #[command(flatten)]
@@ -693,31 +714,49 @@ pub async fn dispatch_meta_with_client(
         MetaCommand::AdAccounts { command } => match command {
             AdAccountsCommand::List(args) => {
                 let fields = resolve_fields(&args.field_input)?;
-                let business_id = resolve_business_id(config, args.business_id.as_deref())?;
-                let edge = match args.scope {
-                    ScopeArg::Accessible => "ad_accounts",
-                    ScopeArg::Owned => "owned_ad_accounts",
-                    ScopeArg::PendingClient => "pending_client_ad_accounts",
-                };
-                let response = accounts::list_ad_accounts(
-                    client,
-                    &business_id,
-                    args.scope.into(),
-                    &fields,
-                    args.pagination.page_size,
-                    args.pagination.cursor.as_deref(),
-                    args.pagination.all,
-                    args.pagination.max_items,
-                )
-                .await?;
-                Ok(graph_result(
-                    client,
-                    response,
-                    &format!("/{business_id}/{edge}"),
-                    Some(business_id),
-                    None,
-                    Vec::new(),
-                ))
+                match resolve_ad_accounts_target(config, &args)? {
+                    AdAccountsTarget::PersonalAccessible => {
+                        let response = accounts::list_me_ad_accounts(
+                            client,
+                            &fields,
+                            args.pagination.page_size,
+                            args.pagination.cursor.as_deref(),
+                            args.pagination.all,
+                            args.pagination.max_items,
+                        )
+                        .await?;
+                        Ok(graph_result(
+                            client,
+                            response,
+                            "/me/adaccounts",
+                            Some("me".to_string()),
+                            None,
+                            Vec::new(),
+                        ))
+                    }
+                    AdAccountsTarget::Business { business_id, scope } => {
+                        let edge = business_ad_accounts_edge(scope);
+                        let response = accounts::list_ad_accounts(
+                            client,
+                            &business_id,
+                            scope.into(),
+                            &fields,
+                            args.pagination.page_size,
+                            args.pagination.cursor.as_deref(),
+                            args.pagination.all,
+                            args.pagination.max_items,
+                        )
+                        .await?;
+                        Ok(graph_result(
+                            client,
+                            response,
+                            &format!("/{business_id}/{edge}"),
+                            Some(business_id),
+                            None,
+                            Vec::new(),
+                        ))
+                    }
+                }
             }
         },
         MetaCommand::Campaigns { command } => match command {
@@ -813,7 +852,7 @@ pub async fn dispatch_meta_with_client(
                 let response = creative::get_creative_preview(
                     client,
                     &creative_id,
-                    args.ad_format.as_deref(),
+                    &args.ad_format,
                     args.render_type.as_deref(),
                     &fields,
                 )
@@ -1227,6 +1266,15 @@ fn meta_command_result(data: Value, endpoint: &str, exit_code: u8) -> CommandRes
     )
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AdAccountsTarget {
+    PersonalAccessible,
+    Business {
+        business_id: String,
+        scope: ScopeArg,
+    },
+}
+
 fn resolve_business_id(
     config: &ResolvedConfig,
     value: Option<&str>,
@@ -1240,6 +1288,31 @@ fn resolve_business_id(
                     .to_string(),
             )
         })
+}
+
+fn resolve_ad_accounts_target(
+    config: &ResolvedConfig,
+    args: &AdAccountListArgs,
+) -> Result<AdAccountsTarget, MetaAdsError> {
+    match resolve_business_id(config, args.business_id.as_deref()) {
+        Ok(business_id) => Ok(AdAccountsTarget::Business {
+            business_id,
+            scope: args.scope,
+        }),
+        Err(_) if args.scope == ScopeArg::Accessible => Ok(AdAccountsTarget::PersonalAccessible),
+        Err(_) => Err(MetaAdsError::InvalidArgument(format!(
+            "business id is required for --scope {}; pass --business-id or set default_business_id",
+            args.scope.as_cli_value()
+        ))),
+    }
+}
+
+fn business_ad_accounts_edge(scope: ScopeArg) -> &'static str {
+    match scope {
+        ScopeArg::Accessible => "client_ad_accounts",
+        ScopeArg::Owned => "owned_ad_accounts",
+        ScopeArg::PendingClient => "pending_client_ad_accounts",
+    }
 }
 
 fn resolve_account_id(
@@ -1280,6 +1353,21 @@ async fn resolve_preview_creative_id(
         _ => Err(MetaAdsError::InvalidArgument(
             "preview requires exactly one of --creative or --ad".to_string(),
         )),
+    }
+}
+
+fn parse_time_increment(value: &str) -> Result<String, String> {
+    let normalized = value.trim().to_ascii_lowercase();
+    if matches!(normalized.as_str(), "monthly" | "all_days") {
+        return Ok(normalized);
+    }
+
+    match value.parse::<u32>() {
+        Ok(days) if (1..=90).contains(&days) => Ok(days.to_string()),
+        _ => Err(
+            "time increment must be `monthly`, `all_days`, or an integer number of days from 1 to 90"
+                .to_string(),
+        ),
     }
 }
 
@@ -1503,11 +1591,15 @@ fn extract_report_run_id(data: &Value) -> Option<String> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use agent_ads_core::config::{AccessTokenSource, ConfigSnapshot};
+    use agent_ads_core::config::{AccessTokenSource, ConfigSnapshot, ResolvedConfig};
     use agent_ads_core::output::OutputFormat;
+    use agent_ads_core::GraphClient;
+    use serde_json::json;
     use std::path::PathBuf;
+    use wiremock::matchers::{method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use super::{credential_store_check_ok, credential_store_detail};
+    use super::*;
 
     pub fn snapshot_with_auth(
         access_token_source: AccessTokenSource,
@@ -1528,6 +1620,19 @@ pub(crate) mod tests {
             default_business_id: None,
             default_account_id: None,
             output_format: OutputFormat::Json,
+        }
+    }
+
+    fn test_config(base_url: &str) -> ResolvedConfig {
+        ResolvedConfig {
+            access_token: "token".to_string(),
+            api_base_url: base_url.to_string(),
+            api_version: "v25.0".to_string(),
+            timeout_seconds: 10,
+            default_business_id: None,
+            default_account_id: None,
+            output_format: OutputFormat::Json,
+            config_path: "agent-ads.config.json".into(),
         }
     }
 
@@ -1553,5 +1658,220 @@ pub(crate) mod tests {
 
         assert!(!credential_store_check_ok(&snapshot));
         assert!(credential_store_detail(&snapshot).contains("OS credential store unavailable"));
+    }
+
+    #[test]
+    fn parse_time_increment_accepts_supported_values() {
+        assert_eq!(parse_time_increment("1").unwrap(), "1");
+        assert_eq!(parse_time_increment("7").unwrap(), "7");
+        assert_eq!(parse_time_increment("MONTHLY").unwrap(), "monthly");
+    }
+
+    #[test]
+    fn parse_time_increment_rejects_invalid_aliases() {
+        let error = parse_time_increment("daily").unwrap_err();
+
+        assert!(error.contains("monthly"));
+        assert!(error.contains("all_days"));
+    }
+
+    #[test]
+    fn accessible_ad_accounts_without_business_id_fall_back_to_me() {
+        let config = ResolvedConfig {
+            default_business_id: None,
+            ..test_config("https://graph.facebook.com")
+        };
+        let args = AdAccountListArgs {
+            business_id: None,
+            scope: ScopeArg::Accessible,
+            pagination: PaginationArgs::default(),
+            field_input: crate::FieldInputArgs::default(),
+        };
+
+        assert_eq!(
+            resolve_ad_accounts_target(&config, &args).unwrap(),
+            AdAccountsTarget::PersonalAccessible
+        );
+    }
+
+    #[test]
+    fn owned_ad_accounts_without_business_id_still_error() {
+        let config = ResolvedConfig {
+            default_business_id: None,
+            ..test_config("https://graph.facebook.com")
+        };
+        let args = AdAccountListArgs {
+            business_id: None,
+            scope: ScopeArg::Owned,
+            pagination: PaginationArgs::default(),
+            field_input: crate::FieldInputArgs::default(),
+        };
+
+        let error = resolve_ad_accounts_target(&config, &args).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("business id is required for --scope owned"));
+    }
+
+    #[tokio::test]
+    async fn ad_accounts_list_without_business_id_uses_me_adaccounts() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/v25.0/me/adaccounts"))
+            .and(query_param("access_token", "token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [{ "id": "act_1" }]
+            })))
+            .mount(&server)
+            .await;
+
+        let config = test_config(&server.uri());
+        let client = GraphClient::from_config(&config).unwrap();
+        let result = dispatch_meta_with_client(
+            &client,
+            &config,
+            MetaCommand::AdAccounts {
+                command: AdAccountsCommand::List(AdAccountListArgs {
+                    business_id: None,
+                    scope: ScopeArg::Accessible,
+                    pagination: PaginationArgs::default(),
+                    field_input: crate::FieldInputArgs::default(),
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.envelope.data, json!([{ "id": "act_1" }]));
+        assert_eq!(result.envelope.meta.endpoint, "/me/adaccounts");
+        assert_eq!(result.envelope.meta.object_id.as_deref(), Some("me"));
+    }
+
+    #[tokio::test]
+    async fn ad_accounts_list_with_business_id_uses_business_edge() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/v25.0/123/client_ad_accounts"))
+            .and(query_param("access_token", "token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [{ "id": "act_2" }]
+            })))
+            .mount(&server)
+            .await;
+
+        let config = test_config(&server.uri());
+        let client = GraphClient::from_config(&config).unwrap();
+        let result = dispatch_meta_with_client(
+            &client,
+            &config,
+            MetaCommand::AdAccounts {
+                command: AdAccountsCommand::List(AdAccountListArgs {
+                    business_id: Some("123".to_string()),
+                    scope: ScopeArg::Accessible,
+                    pagination: PaginationArgs::default(),
+                    field_input: crate::FieldInputArgs::default(),
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.envelope.data, json!([{ "id": "act_2" }]));
+        assert_eq!(result.envelope.meta.endpoint, "/123/client_ad_accounts");
+        assert_eq!(result.envelope.meta.object_id.as_deref(), Some("123"));
+    }
+
+    #[tokio::test]
+    async fn insights_query_forwards_time_increment() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/v25.0/act_1/insights"))
+            .and(query_param("access_token", "token"))
+            .and(query_param("time_increment", "7"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "data": [{ "spend": "12.34" }]
+            })))
+            .mount(&server)
+            .await;
+
+        let config = ResolvedConfig {
+            default_account_id: Some("act_1".to_string()),
+            ..test_config(&server.uri())
+        };
+        let client = GraphClient::from_config(&config).unwrap();
+        let result = dispatch_meta_with_client(
+            &client,
+            &config,
+            MetaCommand::Insights {
+                command: InsightsCommand::Query(InsightsQueryArgs {
+                    request: InsightsRequestArgs {
+                        selector: SelectorArgs::default(),
+                        level: Some("campaign".to_string()),
+                        time_increment: Some("7".to_string()),
+                        field_input: crate::FieldInputArgs::default(),
+                        time_input: TimeInputArgs::default(),
+                        breakdowns: Vec::new(),
+                        action_breakdowns: Vec::new(),
+                        sort: Vec::new(),
+                        filters: Vec::new(),
+                        filter_file: None,
+                        attribution_windows: Vec::new(),
+                    },
+                    pagination: PaginationArgs::default(),
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.envelope.data, json!([{ "spend": "12.34" }]));
+    }
+
+    #[tokio::test]
+    async fn report_run_submit_forwards_time_increment() {
+        let server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/v25.0/act_1/insights"))
+            .and(query_param("access_token", "token"))
+            .and(query_param("time_increment", "monthly"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "report_run_id": "run_1"
+            })))
+            .mount(&server)
+            .await;
+
+        let config = ResolvedConfig {
+            default_account_id: Some("act_1".to_string()),
+            ..test_config(&server.uri())
+        };
+        let client = GraphClient::from_config(&config).unwrap();
+        let result = dispatch_meta_with_client(
+            &client,
+            &config,
+            MetaCommand::ReportRuns {
+                command: ReportRunsCommand::Submit(InsightsRequestArgs {
+                    selector: SelectorArgs::default(),
+                    level: Some("campaign".to_string()),
+                    time_increment: Some("monthly".to_string()),
+                    field_input: crate::FieldInputArgs::default(),
+                    time_input: TimeInputArgs::default(),
+                    breakdowns: Vec::new(),
+                    action_breakdowns: Vec::new(),
+                    sort: Vec::new(),
+                    filters: Vec::new(),
+                    filter_file: None,
+                    attribution_windows: Vec::new(),
+                }),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.envelope.data, json!({ "report_run_id": "run_1" }));
     }
 }

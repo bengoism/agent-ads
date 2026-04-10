@@ -100,6 +100,37 @@ pub mod accounts {
         }
     }
 
+    pub async fn list_me_ad_accounts(
+        client: &GraphClient,
+        fields: &[String],
+        limit: Option<u32>,
+        after: Option<&str>,
+        fetch_all: bool,
+        max_items: Option<usize>,
+    ) -> Result<GraphResponse> {
+        let mut params = BTreeMap::new();
+        with_limit(&mut params, limit);
+        with_after(&mut params, after);
+        let fields = list_fields_or_default(
+            fields,
+            &[
+                "id",
+                "account_id",
+                "name",
+                "account_status",
+                "currency",
+                "timezone_name",
+            ],
+        );
+        if fetch_all {
+            client
+                .get_edge_all("me", "adaccounts", &params, &fields, max_items)
+                .await
+        } else {
+            client.get_edge("me", "adaccounts", &params, &fields).await
+        }
+    }
+
     #[derive(Debug, Clone, Copy)]
     pub enum AdAccountScope {
         Accessible,
@@ -446,12 +477,12 @@ pub mod creative {
     pub async fn get_creative_preview(
         client: &GraphClient,
         creative_id: &str,
-        ad_format: Option<&str>,
+        ad_format: &str,
         render_type: Option<&str>,
         fields: &[String],
     ) -> Result<GraphResponse> {
         let mut params = BTreeMap::new();
-        with_if_present(&mut params, "ad_format", ad_format);
+        params.insert("ad_format".to_string(), ad_format.to_string());
         with_if_present(&mut params, "render_type", render_type);
         let fields = list_fields_or_default(fields, &["body"]);
         client
