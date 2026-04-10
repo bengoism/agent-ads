@@ -7,13 +7,16 @@ Use this file for end-to-end recipes. Each workflow is a sequence of commands yo
 Start from your token and discover all businesses and their ad accounts:
 
 ```bash
-# Step 1: List all businesses
+# Step 1: List accessible ad accounts for the current token
+agent-ads meta ad-accounts list --all --pretty
+
+# Step 2: List all businesses when you need business-scoped discovery
 agent-ads meta businesses list --all --pretty
 
-# Step 2: For each business, list accessible ad accounts
+# Step 3: For each business, list accessible ad accounts
 agent-ads meta ad-accounts list --business-id 1234567890 --scope accessible --all
 
-# Step 3: Optionally check which accounts you own vs. have access to
+# Step 4: Optionally check which accounts you own vs. have access to
 agent-ads meta ad-accounts list --business-id 1234567890 --scope owned --all
 ```
 
@@ -108,7 +111,7 @@ agent-ads meta activities list \
   --all
 
 # Step 2: Inspect a specific ad's creative
-agent-ads meta creatives preview --ad 120210987654321
+agent-ads meta creatives preview --ad 120210987654321 --ad-format MOBILE_FEED_STANDARD
 
 # Step 3: Check if the pixel is healthy
 agent-ads meta pixel-health get --pixel 9876543210

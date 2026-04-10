@@ -61,9 +61,9 @@ You must use one or the other — not both. If neither is provided and `default_
 
 | Flag | Values | Description |
 |------|--------|-------------|
-| `--time-increment` | `1` (daily), `7` (weekly), `14` (biweekly), `monthly`, `all_days` | How to bucket the time range into rows |
+| `--time-increment` | `monthly`, `all_days`, or an integer day count from `1` to `90` | How to bucket the time range into rows |
 
-Most common: `1` for daily, `monthly` for monthly. Omit for a single aggregated row per entity.
+Most common: `1` for daily, `monthly` for monthly. Omit for a single aggregated row per entity. `daily` is not a valid value; use `1`.
 
 #### Breakdowns and dimensions
 

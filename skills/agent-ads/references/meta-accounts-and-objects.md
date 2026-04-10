@@ -20,19 +20,22 @@ Default fields: `id`, `name`, `verification_status`.
 
 ## Ad Accounts
 
-List ad accounts under a business. The `--scope` flag controls which relationship to query:
+List accessible ad accounts or business-scoped relationships. The `--scope` flag controls which relationship to query:
 
 | Scope | Description |
 |-------|-------------|
-| `accessible` (default) | All ad accounts the business can access |
+| `accessible` (default) | Accessible ad accounts; falls back to `/me/adaccounts` when no business ID is provided |
 | `owned` | Only ad accounts owned by the business |
 | `pending-client` | Ad accounts with pending client relationships |
 
 ```bash
-# Default scope (accessible)
+# Default scope (accessible) without a business ID
+agent-ads meta ad-accounts list
+
+# Accessible accounts for a specific business
 agent-ads meta ad-accounts list --business-id 1234567890
 
-# Explicit scope
+# Explicit business-scoped relationship
 agent-ads meta ad-accounts list --business-id 1234567890 --scope owned
 
 # With custom fields
@@ -41,7 +44,7 @@ agent-ads meta ad-accounts list --business-id 1234567890 --fields id,name,accoun
 
 Default fields: `id`, `account_id`, `name`, `account_status`, `currency`, `timezone_name`.
 
-If `default_business_id` is set in config, you can omit `--business-id`.
+If `default_business_id` is set in config, it is used before the personal `/me/adaccounts` fallback. `owned` and `pending-client` still require a business ID (directly or via config).
 
 ## Campaigns
 

@@ -25,19 +25,19 @@ Get the rendered ad preview. You can target by creative ID or ad ID:
 
 ```bash
 # By creative ID
-agent-ads meta creatives preview --creative 120210123456789
+agent-ads meta creatives preview --creative 120210123456789 --ad-format MOBILE_FEED_STANDARD
 
 # By ad ID (resolves the ad's creative automatically)
-agent-ads meta creatives preview --ad 120210987654321
+agent-ads meta creatives preview --ad 120210987654321 --ad-format MOBILE_FEED_STANDARD
 ```
 
 Default fields: `body` (the rendered preview HTML/payload).
 
-Optional flags:
+Required and optional flags:
 
 | Flag | Description |
 |------|-------------|
-| `--ad-format <format>` | Ad format to preview (e.g. `DESKTOP_FEED_STANDARD`, `MOBILE_FEED_STANDARD`) |
+| `--ad-format <format>` | Required ad format to preview (e.g. `DESKTOP_FEED_STANDARD`, `MOBILE_FEED_STANDARD`) |
 | `--render-type <type>` | Render type (e.g. `FALLBACK`) |
 | `--fields <list>` | Custom fields |
 
@@ -85,7 +85,7 @@ agent-ads meta activities list \
 
 | Question | Command |
 |----------|---------|
-| "What does this ad look like?" | `creatives preview --ad <id>` |
+| "What does this ad look like?" | `creatives preview --ad <id> --ad-format MOBILE_FEED_STANDARD` |
 | "What's the raw creative spec?" | `creatives get --id <id>` |
 | "What changed in this account recently?" | `activities list --account <id> --since <time> --all` |
 | "Who changed this specific campaign?" | `activities list --account <id> --oid <campaign-id> --all` |

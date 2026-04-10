@@ -15,9 +15,9 @@ Two environment variables control Meta API access:
 | Permission | Needed for |
 |------------|------------|
 | `ads_read` | All `--account` commands: campaigns, insights, creatives, pixels |
-| `business_management` | `businesses list` and `ad-accounts list` (discovery) |
+| `business_management` | `businesses list` and business-scoped `ad-accounts list` discovery |
 
-Both are read-only — no write access is granted. Generate a token at the [Graph API Explorer](https://developers.facebook.com/tools/explorer/) with the permissions above.
+Both are read-only — no write access is granted. `ad-accounts list` without a business ID can still fall back to `/me/adaccounts`, but business-scoped discovery (`--business-id`, `--scope owned`, `--scope pending-client`) still needs `business_management`. Generate a token at the [Graph API Explorer](https://developers.facebook.com/tools/explorer/) with the permissions above.
 
 Secrets are **never** read from CLI flags or config files. Persistent secrets live in the OS credential store, and shell env remains available for overrides or CI.
 
@@ -131,8 +131,8 @@ Add `--envelope` to wrap data with response metadata, paging cursors, and warnin
   "data": [{ "id": "act_123", "name": "Agency Account" }],
   "meta": {
     "api_version": "v25.0",
-    "endpoint": "/1234567890/ad_accounts",
-    "object_id": "1234567890"
+    "endpoint": "/me/adaccounts",
+    "object_id": "me"
   },
   "paging": { "cursors": { "before": "...", "after": "..." }, "next": "..." }
 }

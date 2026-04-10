@@ -108,7 +108,7 @@ Usage: agent-ads meta [OPTIONS] <COMMAND>
 
 Commands:
   businesses          List businesses accessible to your token
-  ad-accounts         List ad accounts under a business
+  ad-accounts         List accessible ad accounts or business-scoped relationships
   campaigns           List campaigns in an ad account
   adsets              List ad sets in an ad account
   ads                 List ads in an ad account
@@ -177,12 +177,12 @@ agent-ads meta ad-accounts --help
 ```
 
 ```text
-List ad accounts under a business
+List accessible ad accounts or business-scoped relationships
 
 Usage: agent-ads meta ad-accounts [OPTIONS] <COMMAND>
 
 Commands:
-  list  List ad accounts by scope [aliases: ls]
+  list  List accessible ad accounts or business-scoped relationships [aliases: ls]
   help  Print this message or the help of the given subcommand(s)
 
 Options:
